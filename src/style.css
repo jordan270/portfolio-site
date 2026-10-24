@@ -114,6 +114,7 @@ html.lenis, html.lenis body {
   min-height: 120vh;
   justify-content: flex-start;
   text-align: left;
+  padding-left: 5vw;
 }
 
 .section--autopilot {
@@ -141,18 +142,20 @@ html.lenis, html.lenis body {
   padding: 0 6vw;
 }
 
-/* Content blocks with subtle local backdrop to ensure contrast over particles */
+/* Content stays in a bounded column so it cannot cover the hologram. */
 .content-block {
-  max-width: 36rem;
-  width: 100%;
+  width: min(34rem, 46vw);
+  max-width: min(34rem, 46vw);
   position: relative;
-  /* Soft local backdrop vignette (no boxes) for particle contrast */
-  background: radial-gradient(ellipse 95% 95% at 50% 50%, rgba(38, 38, 43, 0.55) 0%, rgba(38, 38, 43, 0) 80%);
-  padding: 1.5rem 1rem;
+  overflow-wrap: anywhere;
+}
+
+.section--hero .content-block {
+  width: min(34rem, 38vw);
+  max-width: min(34rem, 38vw);
 }
 
 .section--contact .content-block {
-  max-width: 44rem;
   margin: 0 auto;
 }
 
@@ -163,7 +166,7 @@ html.lenis, html.lenis body {
 
 /* Typography with faint text-shadow for contrast over particles */
 h1, h2, p, .section-label, .quiet-link, .status-text, .badge {
-  text-shadow: 0 1px 12px rgba(22, 22, 26, 0.85), 0 2px 24px rgba(22, 22, 26, 0.65);
+  text-shadow: 0 1px 8px rgba(22, 22, 26, 0.24);
 }
 
 .section-label {
@@ -183,9 +186,25 @@ h1, h2 {
 }
 
 h1 {
-  font-size: clamp(2rem, 4.2vw, 3.8rem);
-  line-height: 1.1;
-  margin-bottom: 1rem;
+  font-size: clamp(2.75rem, 8vw, 7rem);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  margin-bottom: 0.8rem;
+}
+
+.hero-role {
+  color: var(--text-color);
+  font-size: clamp(1.25rem, 2.4vw, 2rem);
+  line-height: 1.2;
+  margin-bottom: 0.85rem;
+}
+
+.project-subtitle {
+  color: var(--text-color);
+  font-size: clamp(1.05rem, 1.75vw, 1.4rem);
+  line-height: 1.25;
+  margin: -0.2rem 0 0.8rem;
 }
 
 h2 {
@@ -215,17 +234,15 @@ p {
 }
 
 .badge {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0.22rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: none;
+  padding: 0;
+  border: 0;
 }
 
 /* Status indicator (green dot + Open to internships) */
@@ -307,6 +324,11 @@ a:focus-visible {
   border-radius: 2px;
 }
 
+.quiet-link,
+.contact-links > * {
+  overflow-wrap: anywhere;
+}
+
 /* CS50 footer */
 .cs50-footer {
   margin-top: 3.5rem;
@@ -339,13 +361,18 @@ a:focus-visible {
 
 @media (max-width: 768px) {
   .section {
-    padding: 0 1.5rem calc(8vh + 1.5rem) 1.5rem;
+    padding: 0 max(6vw, 1.5rem) calc(8vh + 1.5rem);
     align-items: flex-end;
   }
 
   .section--hero {
     min-height: 120vh;
-    padding-bottom: calc(10vh + 2rem);
+    padding-bottom: 2rem;
+  }
+
+  .section--hero .content-block {
+    width: 100%;
+    max-width: 100%;
   }
 
   .section--autopilot,
@@ -375,8 +402,8 @@ a:focus-visible {
   }
 
   .content-block {
+    width: 100%;
     max-width: 100%;
-    padding: 1rem 0;
   }
 
   p {
@@ -395,8 +422,8 @@ a:focus-visible {
 /* Very narrow screens down to 360px */
 @media (max-width: 400px) {
   .section {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+    padding-left: max(6vw, 1.25rem);
+    padding-right: max(6vw, 1.25rem);
   }
 }
 

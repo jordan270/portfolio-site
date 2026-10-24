@@ -4,7 +4,7 @@ import './style.css';
 // USE_STUB: true  → use the 2D canvas stub (no real engine on this branch)
 //           false → import the real engine from ./engine/index.ts
 // ---------------------------------------------------------------------------
-export const USE_STUB = true;
+export const USE_STUB = false;
 
 import { createEngine as createRealEngine } from './engine/index.ts';
 import { createEngineStub, type ParticleEngine } from './ui/engineStub';
@@ -19,10 +19,7 @@ function initApp(): void {
     return;
   }
 
-  // 1. Initialize Engine (stub or real).
-  //    The real engine still uses 'tower' until its branch is updated to 'india'.
-  //    Both implement the same runtime interface; we cast to ParticleEngine for
-  //    type-checking against our stub's updated ShapeName.
+  // 1. Initialize Engine (stub or real). Both expose the same UI-facing API.
   const engine: ParticleEngine = USE_STUB
     ? createEngineStub()
     : (createRealEngine() as unknown as ParticleEngine);

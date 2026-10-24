@@ -61,7 +61,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
         y = (Math.cos(phi) * 1.1) + Math.sin(x * 3) * 0.1;
         z = Math.sin(phi) * Math.sin(theta) * 0.6;
       } else if (shape === 'india') {
-        // India shape: castle/tower silhouette with concentric rings
+        // India representation for stub-only UI previews; production uses the engine mask.
         if (i < count * 0.3) {
           // Base range rings
           const r = 0.5 + (i % 2) * 0.4;
