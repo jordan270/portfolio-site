@@ -10,6 +10,8 @@ export interface ParticleEngine {
   mount(container: HTMLElement): void;
   setMorph(from: ShapeName, to: ShapeName, t: number): void;
   setEnergy(value: number): void;
+  setQuality(quality: 'high' | 'medium' | 'low' | 'auto'): void;
+  setDebugScales(size: number, alpha: number): void;
   resize(): void;
   dispose(): void;
 }
@@ -26,6 +28,8 @@ uniform float uTime;
 uniform float uEnergy;
 uniform float uBreath;
 uniform float uParallax;
+uniform float uPixelRatio;
+uniform float uSizeScale;
 varying float vSeed;
 varying float vEdge;
 void main() {
@@ -40,29 +44,38 @@ void main() {
   p.y -= uParallax * 0.08;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = aSize * (300.0 / max(1.0, -mvPosition.z));
+  gl_PointSize = clamp(aSize * uPixelRatio * (2.8 / max(0.1, -mvPosition.z)) * uSizeScale, 1.0, 5.0);
   vSeed = aSeed;
   vEdge = 1.0 - smoothstep(0.0, 0.38, abs(length(p) - 0.82));
 }`;
 
 const fragmentShader = `
 uniform float uOpacity;
+uniform float uAlphaScale;
 varying float vSeed;
 varying float vEdge;
 void main() {
   vec2 q = gl_PointCoord - vec2(0.5);
-  float r = length(q) * 2.0;
-  float alpha = 1.0 - smoothstep(0.55, 1.0, r);
-  float variation = mix(0.35, 1.0, fract(vSeed * 43758.5453));
-  float brightness = mix(0.72, 1.25, vEdge);
-  gl_FragColor = vec4(vec3(brightness), alpha * variation * uOpacity);
+  float r = length(q);
+  if (r > 0.5) discard;
+  float falloff = 1.0 - smoothstep(0.12, 0.5, r);
+  float variation = mix(0.2, 0.7, fract(vSeed * 43758.5453));
+  float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.7);
+  float rim = mix(0.78, 1.2, vEdge);
+  gl_FragColor = vec4(vec3(rim), min(1.0, falloff * opacity));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
 
 export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
-  const count = Math.max(1000, Math.floor(opts.count ?? (mobile ? 20_000 : 60_000)));
+  const qualityCounts = { high: 60_000, medium: 30_000, low: 12_000 } as const;
+  let quality: 'high' | 'medium' | 'low' | 'auto' = 'auto';
+  let count = Math.max(1000, Math.floor(opts.count ?? (mobile ? qualityCounts.medium : qualityCounts.high)));
+  const customCount = opts.count !== undefined;
+  let pixelRatio = 1;
+  let frameAverage = 16.7;
+  let slowFrames = 0, fastFrames = 0;
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let container: HTMLElement | null = null;
   let renderer: THREE.WebGLRenderer | null = null;
@@ -95,10 +108,37 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     if (document.hidden) cancelAnimationFrame(raf);
     else if (!disposed && renderer) { clock.getDelta(); raf = requestAnimationFrame(render); }
   };
+  const setCount = (nextCount: number) => {
+    if (count === nextCount || !geometry) { count = nextCount; return; }
+    count = nextCount;
+    shapeCache.clear();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    const seeds = new Float32Array(count), sizes = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      seeds[i] = Math.random();
+      sizes[i] = Math.random() < 0.03 ? 2.1 + Math.random() * 0.45 : 0.9 + Math.random() * 0.85;
+    }
+    geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+    geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    installShapes(fromName, toName);
+  };
   const render = () => {
     if (!renderer || !scene || !camera || !material || disposed || document.hidden) return;
     raf = requestAnimationFrame(render);
     const dt = Math.min(clock.getDelta(), 0.05);
+    frameAverage += (dt * 1000 - frameAverage) * 0.08;
+    if (quality === 'auto' && !customCount) {
+      slowFrames = frameAverage > 24 ? slowFrames + 1 : 0;
+      fastFrames = frameAverage < 17 ? fastFrames + 1 : 0;
+      if (slowFrames >= 30) {
+        const currentTier = count >= qualityCounts.high ? 'high' : count >= qualityCounts.medium ? 'medium' : 'low';
+        setCount(qualityCounts[currentTier === 'high' ? 'medium' : 'low']);
+        slowFrames = 0; fastFrames = 0;
+      } else if (fastFrames >= 600 && count < (mobile ? qualityCounts.medium : qualityCounts.high)) {
+        setCount(Math.min(mobile ? qualityCounts.medium : qualityCounts.high, count === qualityCounts.low ? qualityCounts.medium : qualityCounts.high));
+        slowFrames = 0; fastFrames = 0;
+      }
+    }
     const current = material.uniforms.uMorph.value as number;
     material.uniforms.uMorph.value = reducedMotion ? 0 : THREE.MathUtils.damp(current, targetMorph, 5, dt);
     const elapsed = clock.elapsedTime;
@@ -135,18 +175,19 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       geometry.setAttribute('positionA', new THREE.BufferAttribute(getShape('sphere'), 3));
       geometry.setAttribute('positionB', new THREE.BufferAttribute(getShape('sphere'), 3));
       const seeds = new Float32Array(count), sizes = new Float32Array(count);
-      for (let i = 0; i < count; i++) { seeds[i] = Math.random(); sizes[i] = 1.2 + Math.random() * 2.1; }
+      for (let i = 0; i < count; i++) { seeds[i] = Math.random(); sizes[i] = Math.random() < 0.03 ? 2.1 + Math.random() * 0.45 : 0.9 + Math.random() * 0.85; }
       geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
       geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 0.9 } },
+        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 0.62 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 0.8 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      renderer.setPixelRatio(pixelRatio);
       renderer.setClearColor(0x26262b, 1);
       renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;';
       target.appendChild(renderer.domElement);
@@ -166,6 +207,18 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       targetMorph = reducedMotion ? 0 : THREE.MathUtils.clamp(t, 0, 1);
     },
     setEnergy(value) { energy = Number.isFinite(value) ? Math.max(0, value) : 1; },
+    setDebugScales(size, alpha) {
+      if (!material) return;
+      material.uniforms.uSizeScale.value = THREE.MathUtils.clamp(size, 0.25, 2.5);
+      material.uniforms.uAlphaScale.value = THREE.MathUtils.clamp(alpha, 0, 2);
+    },
+    setQuality(value) {
+      quality = value;
+      if (value === 'auto') {
+        if (!customCount) setCount(mobile ? qualityCounts.medium : qualityCounts.high);
+      } else setCount(qualityCounts[value]);
+      slowFrames = 0; fastFrames = 0;
+    },
     resize() {
       if (!container || !renderer || !camera) return;
       const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
