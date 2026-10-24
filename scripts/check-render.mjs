@@ -37,7 +37,7 @@ async function screenshot(name) {
 }
 
 await page.goto(`${baseUrl}/src/engine/demo.html?quality=high`, { waitUntil: 'networkidle' });
-const shapeNames = ['face', 'tower', 'lens', 'f1', 'dust'];
+const shapeNames = ['face', 'india', 'lens', 'f1', 'dust'];
 const demo = {};
 for (let i = 0; i < shapeNames.length; i++) {
   await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { generate as face, loadFaceData } from './shapes/face.ts';
-import { generate as tower } from './shapes/tower.ts';
+import { generate as india, loadIndiaData } from './shapes/india.ts';
 import { generate as lens } from './shapes/lens.ts';
 import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
 import { generate as dust } from './shapes/dust.ts';
 
-export type ShapeName = 'face' | 'tower' | 'lens' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'lens' | 'f1' | 'dust';
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
@@ -17,11 +17,11 @@ export interface ParticleEngine {
   dispose(): void;
 }
 
-const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, tower, lens, f1, dust };
+const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, lens, f1, dust };
 
 function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
   if (name === 'sphere') return 'face';
-  if (name === 'map') return 'tower';
+  if (name === 'map') return 'india';
   if (name === 'helix') return 'lens';
   if (name === 'galaxy') return 'dust';
   return name;
@@ -41,9 +41,12 @@ uniform float uPixelRatio;
 uniform float uSizeScale;
 uniform float uFaceFrom;
 uniform float uFaceTo;
+uniform float uIndiaFrom;
+uniform float uIndiaTo;
 varying float vSeed;
 varying float vEdge;
 varying float vFaceWeight;
+varying float vIndiaGlow;
 varying float vWorldY;
 void main() {
   float t = clamp((uMorph - aSeed * 0.16) / (1.0 - 0.16), 0.0, 1.0);
@@ -62,6 +65,7 @@ void main() {
   vSeed = aSeed;
   vEdge = 1.0 - smoothstep(0.0, 0.38, abs(length(p) - 0.82));
   vFaceWeight = mix(uFaceFrom, uFaceTo, t);
+  vIndiaGlow = smoothstep(0.035, 0.047, p.z) * mix(uIndiaFrom, uIndiaTo, t);
   vWorldY = p.y;
 }`;
 
@@ -72,6 +76,7 @@ uniform float uTime;
 varying float vSeed;
 varying float vEdge;
 varying float vFaceWeight;
+varying float vIndiaGlow;
 varying float vWorldY;
 void main() {
   vec2 q = gl_PointCoord - vec2(0.5);
@@ -80,7 +85,7 @@ void main() {
   float falloff = 1.0 - smoothstep(0.12, 0.5, r);
   float variation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
   float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.5);
-  float rim = mix(1.25, 2.0, vEdge);
+  float rim = mix(1.25, 2.0, vEdge) * mix(1.0, 1.65, vIndiaGlow);
   float scanlines = 0.975 + 0.025 * sin(vWorldY * 155.0 + uTime * 10.0);
   float flicker = 0.98 + 0.02 * sin(uTime * 17.0 + vSeed * 41.0);
   float scanY = mod(uTime * 0.12, 2.4) - 1.2;
@@ -88,7 +93,7 @@ void main() {
   float hologramAlpha = scanlines * flicker;
   float faceBrightness = mix(1.0, scanBand, vFaceWeight);
   float faceAlpha = mix(1.0, hologramAlpha, vFaceWeight);
-  gl_FragColor = vec4(vec3(rim * faceBrightness), min(1.0, falloff * opacity * faceAlpha));
+  gl_FragColor = vec4(vec3(rim * faceBrightness), min(1.0, falloff * opacity * faceAlpha * mix(1.0, 1.2, vIndiaGlow)));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -211,7 +216,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 1 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 } },
+        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 1 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
@@ -233,10 +238,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       observer.observe(target);
       window.addEventListener('pointermove', onPointer, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
-      void Promise.all([loadFaceData(), loadF1Source()]).then(() => {
+      void Promise.all([loadFaceData(), loadIndiaData(), loadF1Source()]).then(() => {
         if (disposed || !geometry) return;
-        shapeCache.delete('face'); shapeCache.delete('f1');
-        if (fromName === 'face' || toName === 'face' || fromName === 'f1' || toName === 'f1') installShapes(fromName, toName);
+        shapeCache.delete('face'); shapeCache.delete('india'); shapeCache.delete('f1');
+        if (fromName === 'face' || toName === 'face' || fromName === 'india' || toName === 'india' || fromName === 'f1' || toName === 'f1') installShapes(fromName, toName);
       });
       raf = requestAnimationFrame(render);
     },
@@ -247,6 +252,8 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         if (material) {
           material.uniforms.uFaceFrom.value = from === 'face' ? 1 : 0;
           material.uniforms.uFaceTo.value = to === 'face' ? 1 : 0;
+          material.uniforms.uIndiaFrom.value = from === 'india' ? 1 : 0;
+          material.uniforms.uIndiaTo.value = to === 'india' ? 1 : 0;
         }
       }
       targetMorph = reducedMotion ? 0 : THREE.MathUtils.clamp(t, 0, 1);
