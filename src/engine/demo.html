@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Particle Engine Demo</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body, #demo { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+      body { background: #26262b; color: white; font: 300 14px/1.4 system-ui, sans-serif; }
+      #demo { position: fixed; inset: 0; }
+      #controls { position: fixed; z-index: 2; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(420px, calc(100% - 40px)); text-align: center; }
+      #shape-name { display: block; margin-bottom: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      input { width: 100%; accent-color: white; }
+    </style>
+  </head>
+  <body>
+    <div id="demo"></div>
+    <label id="controls"><span id="shape-name">sphere</span><input id="shape-step" type="range" min="0" max="3" step="0.01" value="0" aria-label="Particle shape" /></label>
+    <script type="module" src="./demo.ts"></script>
+  </body>
+</html>
