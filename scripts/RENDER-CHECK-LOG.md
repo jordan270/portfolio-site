@@ -1,6 +1,5 @@
 # Render check iterations
 
-1. Initial harness attempt stopped before capture: Playwright requires screenshot paths as strings; changed URL objects to `fileURLToPath()`.
-2. First capture: engine and animation rendered, but the offline Google Fonts request logged a console error; demo coverage was 1.24–1.97% and some main-page captures were below 2%. Stubbed the remote font CSS in the harness and increased emitted RGB brightness while keeping shader alpha capped at 0.5.
-3. Second capture: no browser errors and motion differed by 2.42%, but demo midpoint/main coverage still ranged 0.68–1.89%. Raised the depth attenuation numerator from 2.8 to 4.5 and increased base sizes; normal points remain clamped at 3px, with 3% sparkle points up to 5px.
-4. Final capture: no console/page errors; all saturation values are below 0.8%, all coverage values are 2.12–6.96%, and frames one second apart differ by 3.49% of pixels. See `debug/` for the PNG captures (ignored by Git).
+1. First five-shape run: no browser errors and motion passed, but lens, F1, and the main-page midpoint were slightly below 2% coverage (1.85%, 1.87%, and 1.48%).
+2. Expanded the SVG/placeholder bounds and dust field: coverage improved, but lens and F1 remained just under the floor (1.88%, 1.92%).
+3. Raised typical point sizes while keeping ordinary particles hard-clamped to 3px and the 3% sparkle subset capped at 5px. Final five-shape run passed: demo saturation face 0.48%, tower 1.53%, lens 1.47%, F1 2.18%, dust 0.85%; coverage face 9.39%, tower 6.62%, lens 4.98%, F1 4.36%, dust 9.43%. Main-page coverage was 9.04%, 5.18%, 2.06%, and 2.80% at scroll 0%, 25%, 50%, and 75%. No console/page errors; frames one second apart differed by 16.07%. Screenshots are in ignored `debug/`.

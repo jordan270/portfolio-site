@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { generate as sphere } from './shapes/sphere.ts';
-import { generate as map, getMapSourceVersion } from './shapes/map.ts';
-import { generate as helix } from './shapes/helix.ts';
-import { generate as galaxy } from './shapes/galaxy.ts';
-export { setMapSource } from './shapes/map.ts';
+import { generate as face, loadFaceData } from './shapes/face.ts';
+import { generate as tower } from './shapes/tower.ts';
+import { generate as lens } from './shapes/lens.ts';
+import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
+import { generate as dust } from './shapes/dust.ts';
 
-export type ShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
+export type ShapeName = 'face' | 'tower' | 'lens' | 'f1' | 'dust';
+type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
-  setMorph(from: ShapeName, to: ShapeName, t: number): void;
+  setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
   setEnergy(value: number): void;
   setQuality(quality: 'high' | 'medium' | 'low' | 'auto'): void;
   setDebugScales(size: number, alpha: number): void;
@@ -16,7 +17,15 @@ export interface ParticleEngine {
   dispose(): void;
 }
 
-const generators: Record<ShapeName, (count: number) => Float32Array> = { sphere, map, helix, galaxy };
+const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, tower, lens, f1, dust };
+
+function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
+  if (name === 'sphere') return 'face';
+  if (name === 'map') return 'tower';
+  if (name === 'helix') return 'lens';
+  if (name === 'galaxy') return 'dust';
+  return name;
+}
 
 const vertexShader = `
 attribute vec3 positionA;
@@ -30,8 +39,12 @@ uniform float uBreath;
 uniform float uParallax;
 uniform float uPixelRatio;
 uniform float uSizeScale;
+uniform float uFaceFrom;
+uniform float uFaceTo;
 varying float vSeed;
 varying float vEdge;
+varying float vFaceWeight;
+varying float vWorldY;
 void main() {
   float t = clamp((uMorph - aSeed * 0.16) / (1.0 - 0.16), 0.0, 1.0);
   t = t * t * (3.0 - 2.0 * t);
@@ -44,17 +57,22 @@ void main() {
   p.y -= uParallax * 0.08;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  float maxPointSize = mix(3.0, 5.0, step(2.0, aSize));
+  float maxPointSize = mix(3.0, 5.0, step(2.5, aSize));
   gl_PointSize = clamp(aSize * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale, 1.0, maxPointSize);
   vSeed = aSeed;
   vEdge = 1.0 - smoothstep(0.0, 0.38, abs(length(p) - 0.82));
+  vFaceWeight = mix(uFaceFrom, uFaceTo, t);
+  vWorldY = p.y;
 }`;
 
 const fragmentShader = `
 uniform float uOpacity;
 uniform float uAlphaScale;
+uniform float uTime;
 varying float vSeed;
 varying float vEdge;
+varying float vFaceWeight;
+varying float vWorldY;
 void main() {
   vec2 q = gl_PointCoord - vec2(0.5);
   float r = length(q);
@@ -63,7 +81,14 @@ void main() {
   float variation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
   float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.5);
   float rim = mix(1.25, 2.0, vEdge);
-  gl_FragColor = vec4(vec3(rim), min(1.0, falloff * opacity));
+  float scanlines = 0.975 + 0.025 * sin(vWorldY * 155.0 + uTime * 10.0);
+  float flicker = 0.98 + 0.02 * sin(uTime * 17.0 + vSeed * 41.0);
+  float scanY = mod(uTime * 0.12, 2.4) - 1.2;
+  float scanBand = 1.0 + 0.32 * (1.0 - smoothstep(0.0, 0.026, abs(vWorldY - scanY)));
+  float hologramAlpha = scanlines * flicker;
+  float faceBrightness = mix(1.0, scanBand, vFaceWeight);
+  float faceAlpha = mix(1.0, hologramAlpha, vFaceWeight);
+  gl_FragColor = vec4(vec3(rim * faceBrightness), min(1.0, falloff * opacity * faceAlpha));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -71,7 +96,7 @@ void main() {
 export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
   const deviceMemory = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory : undefined;
-  const preferMedium = mobile || (typeof navigator !== 'undefined' && (navigator.hardwareConcurrency <= 4 || (deviceMemory !== undefined && deviceMemory <= 4)));
+  let preferMedium = mobile || (typeof navigator !== 'undefined' && (navigator.hardwareConcurrency <= 4 || (deviceMemory !== undefined && deviceMemory <= 4)));
   const qualityCounts = { high: 60_000, medium: 30_000, low: 12_000 } as const;
   let quality: 'high' | 'medium' | 'low' | 'auto' = 'auto';
   let count = Math.max(1000, Math.floor(opts.count ?? (preferMedium ? qualityCounts.medium : qualityCounts.high)));
@@ -91,15 +116,16 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   let disposed = false;
   let energy = 1;
   let targetMorph = 0;
-  let fromName: ShapeName = 'sphere';
-  let toName: ShapeName = 'sphere';
-  let installedMapVersion = getMapSourceVersion();
+  let fromName: ShapeName = 'face';
+  let toName: ShapeName = 'face';
   let pointerX = 0, pointerY = 0, smoothX = 0, smoothY = 0;
+  let seeds = new Float32Array(count);
+  for (let i = 0; i < count; i++) seeds[i] = Math.random();
   const clock = new THREE.Clock();
   const shapeCache = new Map<ShapeName, Float32Array>();
   const getShape = (name: ShapeName) => {
     let value = shapeCache.get(name);
-    if (!value) { value = generators[name](count); shapeCache.set(name, value); }
+    if (!value) { value = generators[name](count, seeds); shapeCache.set(name, value); }
     return value;
   };
   const onPointer = (event: PointerEvent) => {
@@ -111,14 +137,16 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     else if (!disposed && renderer) { clock.getDelta(); raf = requestAnimationFrame(render); }
   };
   const setCount = (nextCount: number) => {
-    if (count === nextCount || !geometry) { count = nextCount; return; }
+    if (count === nextCount) return;
     count = nextCount;
     shapeCache.clear();
+    seeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) seeds[i] = Math.random();
+    if (!geometry) return;
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-    const seeds = new Float32Array(count), sizes = new Float32Array(count);
+    const sizes = new Float32Array(count);
     for (let i = 0; i < count; i++) {
-      seeds[i] = Math.random();
-      sizes[i] = Math.random() < 0.03 ? 2.3 + Math.random() * 0.6 : 1.05 + Math.random() * 0.95;
+      sizes[i] = Math.random() < 0.03 ? 3.0 + Math.random() * 0.6 : 1.2 + Math.random() * 1.25;
     }
     geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
@@ -174,20 +202,27 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       camera.position.z = 4.2;
       geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-      geometry.setAttribute('positionA', new THREE.BufferAttribute(getShape('sphere'), 3));
-      geometry.setAttribute('positionB', new THREE.BufferAttribute(getShape('sphere'), 3));
-      const seeds = new Float32Array(count), sizes = new Float32Array(count);
-      for (let i = 0; i < count; i++) { seeds[i] = Math.random(); sizes[i] = Math.random() < 0.03 ? 2.3 + Math.random() * 0.6 : 1.05 + Math.random() * 0.95; }
+      const sizes = new Float32Array(count);
+      for (let i = 0; i < count; i++) sizes[i] = Math.random() < 0.03 ? 3.0 + Math.random() * 0.6 : 1.2 + Math.random() * 1.25;
       geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+      geometry.setAttribute('positionA', new THREE.BufferAttribute(getShape('face'), 3));
+      geometry.setAttribute('positionB', new THREE.BufferAttribute(getShape('face'), 3));
       geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 1 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 } },
+        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 1 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+      const gl = renderer.getContext();
+      const rendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const gpuName = rendererInfo ? String(gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL)) : '';
+      if (/intel.*(graphics|uhd|iris)|mali|adreno|apple m\d/i.test(gpuName) && !preferMedium) {
+        preferMedium = true;
+        if (quality === 'auto' && !customCount) setCount(qualityCounts.medium);
+      }
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
       renderer.setPixelRatio(pixelRatio);
       renderer.setClearColor(0x26262b, 1);
@@ -198,13 +233,21 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       observer.observe(target);
       window.addEventListener('pointermove', onPointer, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
+      void Promise.all([loadFaceData(), loadF1Source()]).then(() => {
+        if (disposed || !geometry) return;
+        shapeCache.delete('face'); shapeCache.delete('f1');
+        if (fromName === 'face' || toName === 'face' || fromName === 'f1' || toName === 'f1') installShapes(fromName, toName);
+      });
       raf = requestAnimationFrame(render);
     },
     setMorph(from, to, t) {
-      const mapChanged = installedMapVersion !== getMapSourceVersion() && (from === 'map' || to === 'map');
-      if (from !== fromName || to !== toName || mapChanged) {
-        if (mapChanged) shapeCache.delete('map');
-        fromName = from; toName = to; installShapes(from, to); installedMapVersion = getMapSourceVersion();
+      from = normalizeShape(from); to = normalizeShape(to);
+      if (from !== fromName || to !== toName) {
+        fromName = from; toName = to; installShapes(from, to);
+        if (material) {
+          material.uniforms.uFaceFrom.value = from === 'face' ? 1 : 0;
+          material.uniforms.uFaceTo.value = to === 'face' ? 1 : 0;
+        }
       }
       targetMorph = reducedMotion ? 0 : THREE.MathUtils.clamp(t, 0, 1);
     },

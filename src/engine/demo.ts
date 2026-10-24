@@ -1,6 +1,6 @@
 import { createEngine, type ShapeName } from './index.ts';
 
-const names: ShapeName[] = ['sphere', 'map', 'helix', 'galaxy'];
+const names: ShapeName[] = ['face', 'tower', 'lens', 'f1', 'dust'];
 const root = document.querySelector<HTMLElement>('#demo');
 const slider = document.querySelector<HTMLInputElement>('#shape-step');
 const label = document.querySelector<HTMLElement>('#shape-name');
@@ -11,6 +11,8 @@ const alphaValue = document.querySelector<HTMLOutputElement>('#alpha-value');
 if (!root || !slider || !label) throw new Error('Particle demo markup is incomplete');
 
 const engine = createEngine();
+const quality = new URLSearchParams(location.search).get('quality');
+if (quality === 'high' || quality === 'medium' || quality === 'low' || quality === 'auto') engine.setQuality(quality);
 engine.mount(root);
 function update() {
   const step = Number(slider!.value);

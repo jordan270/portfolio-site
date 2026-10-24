@@ -1,17 +1,32 @@
 # Particle engine
 
-`createEngine(opts?)` creates an engine; call `mount(container)` once to append its renderer canvas. The public interface is `mount`, `setMorph(from, to, t)`, `setEnergy(value)`, `resize`, and `dispose`. `setMorph` clamps `t` to 0–1, replaces shape buffers only when the requested pair changes, and eases the uniform toward the latest value on render frames. `setEnergy` scales idle rotation and breathing. `resize` updates the camera and renderer; a `ResizeObserver` also calls it automatically. `dispose` stops rendering, removes listeners and its canvas, and releases GPU buffers.
+`createEngine(opts?)` mounts one additive particle cloud. `setMorph(from, to, t)` blends between shapes using stable per-particle seeds; `setEnergy`, `setQuality`, `resize`, and `dispose` control motion, adaptive particle count, viewport sizing, and cleanup. The exported `ShapeName` is exactly `'face' | 'tower' | 'lens' | 'f1' | 'dust'`. The engine accepts the old UI labels as temporary aliases (`sphere`→`face`, `map`→`tower`, `helix`→`lens`, `galaxy`→`dust`) so existing callers keep working without changing UI-owned files.
 
-The default quality is `auto`: it starts at 60,000 particles, or 30,000 when the viewport is at most 700px wide. Auto mode steps down after sustained frame times above 24ms and can step back up after sustained fast frames. Call `setQuality('high' | 'medium' | 'low' | 'auto')` to choose 60,000, 30,000, 12,000, or adaptive quality. Pass `{ count }` to pin a custom count and disable adaptive resizing. DPR is capped at 2. Rendering pauses while the document is hidden. With `prefers-reduced-motion: reduce`, transition, rotation, breathing, and noise are disabled and the source shape stays visible.
+## Shapes
 
-The engine uses one `THREE.Points` object and a custom shader. Position A/B, seed, and size are geometry attributes; morphing and transition displacement happen in the vertex shader. Point size uses a `4.5 / viewDepth` attenuation factor, scales with DPR, and clamps normal dots to 1–3 device pixels; 3% of particles use the larger sparkle range up to 5px. The fragment shader clips soft white additive sprites to a circle, keeps per-particle alpha capped at 0.5, varies opacity by seed, and brightens the sphere silhouette. The renderer clears to `#26262b`.
+- `tower`: cylindrical castle tower with eight separated merlons, a sparse doorway/window mask, and two ground rings.
+- `lens`: thin torus, sparse glass, upper-left highlight arc, and a 45° handle.
+- `f1`: samples the alpha silhouette from `/assets/f1.svg` using an offscreen canvas. If that file is absent or invalid, it warns and uses a built-in racing-mark placeholder.
+- `dust`: wide, flat field with low-frequency density variation.
+- `face`: samples `public/shapes/face.bin`. Until the baked points load, or if the file is missing, it warns and uses dust. Scanlines, mild flicker, and a slow horizontal highlight band are weighted by the face morph value and fade out across adjacent transitions.
 
-## Tuning the look
+All shape arrays have one point per particle. Their sample order is driven by the geometry's persistent `aSeed` values, so a particle keeps its identity as it moves between distributions.
 
-- In `index.ts`, adjust the `aSize` range and `uOpacity` for density and apparent particle size. The demo's size and alpha sliders change `uSizeScale` and `uAlphaScale` live.
-- Change the alpha smoothstep in the fragment shader to sharpen or soften each sprite; adjust its `variation` range for opacity contrast.
-- The vertex shader's `0.16` delay spread and `0.018` displacement set the transition character. `uBreath` and the rotation increment control idle motion.
-- In each shape file, adjust its unit-scale geometry and sampling proportions. Shape generators return `count` XYZ triplets.
-- `setMapSource(svgPathOrImageUrl)` is exported from `shapes/map.ts`. It accepts SVG path data in a 0–100 coordinate view or an image URL; after it resolves, future generated map buffers sample that mask. The default placeholder is a rounded blob.
+## Bake a face
 
-Open `demo.html` through Vite (for example `/src/engine/demo.html`) to step through the four shapes with the slider.
+Put a clear, front-facing photo at `private/face.jpg`. That directory is ignored by Git. Install the optional MediaPipe package without changing the project manifest, then run the builder:
+
+```sh
+npm install --no-save --package-lock=false @mediapipe/tasks-vision
+node scripts/build-face.mjs
+```
+
+The script downloads the Face Landmarker model to the OS temporary directory, detects 3D landmarks, triangulates the face oval plus a fading neck extension, and samples 40,000 barycentric points weighted by image darkness and edge strength. It writes packed XYZ `Float32Array` values to `public/shapes/face.bin`. Keep the source photo private; only the generated binary belongs in the site.
+
+## Quality and appearance
+
+Auto quality starts at 60,000 particles (30,000 on mobile or lower-memory/CPU devices), steps down to 30,000 and 12,000 after average frame time exceeds 24ms, and steps up after sustained fast frames. Call `setQuality('high' | 'medium' | 'low' | 'auto')` to select a mode; `{ count }` pins a custom count. DPR is capped at 2 and hidden tabs pause rendering.
+
+Point size uses `4.5 / viewDepth`, DPR scaling, and hard clamps: normal dots 1–3 device pixels, with 3% of particles allowed up to 5px. Per-particle alpha is capped at 0.5. The fragment shader clips to a circle and applies a soft falloff. The renderer clears to `#26262b`.
+
+Open `/src/engine/demo.html` through Vite to step through all five shapes and tune size/alpha. Run `node scripts/check-render.mjs` to capture demo frames for every shape, check main-page frames, pixel coverage/saturation, animation delta, and browser errors. Render artifacts are saved under ignored `debug/`.

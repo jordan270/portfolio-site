@@ -36,18 +36,20 @@ async function screenshot(name) {
   return pixelStats(bytes);
 }
 
-await page.goto(`${baseUrl}/src/engine/demo.html`, { waitUntil: 'networkidle' });
-await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, 0);
-await page.waitForTimeout(1500);
-const demo0 = await screenshot('demo-0.png');
-await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, 0.5);
+await page.goto(`${baseUrl}/src/engine/demo.html?quality=high`, { waitUntil: 'networkidle' });
+const shapeNames = ['face', 'tower', 'lens', 'f1', 'dust'];
+const demo = {};
+for (let i = 0; i < shapeNames.length; i++) {
+  await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
+  await page.waitForTimeout(900);
+  demo[shapeNames[i]] = await screenshot(`demo-${shapeNames[i]}.png`);
+}
+await page.locator('#shape-step').evaluate((el) => { el.value = '0'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+await page.waitForTimeout(500);
+const demoFrameABytes = await page.screenshot({ path: fileURLToPath(new URL('demo-face-a.png', outDir)) });
 await page.waitForTimeout(1000);
-const demo05aBytes = await page.screenshot({ path: fileURLToPath(new URL('demo-0.5-a.png', outDir)) });
-const demo05a = pixelStats(demo05aBytes);
-await page.waitForTimeout(1000);
-const demo05bBytes = await page.screenshot({ path: fileURLToPath(new URL('demo-0.5-b.png', outDir)) });
-const demo05b = pixelStats(demo05bBytes);
-const a = PNG.sync.read(demo05aBytes), b = PNG.sync.read(demo05bBytes);
+const demoFrameBBytes = await page.screenshot({ path: fileURLToPath(new URL('demo-face-b.png', outDir)) });
+const a = PNG.sync.read(demoFrameABytes), b = PNG.sync.read(demoFrameBBytes);
 let changedPixels = 0;
 for (let i = 0; i < a.data.length; i += 4) {
   if (Math.abs(a.data[i] - b.data[i]) + Math.abs(a.data[i + 1] - b.data[i + 1]) + Math.abs(a.data[i + 2] - b.data[i + 2]) > 8) changedPixels++;
@@ -66,11 +68,11 @@ for (const fraction of [0, 0.25, 0.5, 0.75]) {
 await browser.close();
 const results = {
   baseUrl,
-  demo: { 0: demo0, '0.5': demo05a },
+  demo,
   main: mainScreenshots,
   animationDifference,
   errors,
 };
 console.log(JSON.stringify(results, null, 2));
-const metricPass = [demo0, demo05a, ...mainScreenshots].every((m) => m.saturation < 0.12 && m.coverage >= 0.02 && m.coverage <= 0.4);
+const metricPass = [...Object.values(demo), ...mainScreenshots].every((m) => m.saturation < 0.12 && m.coverage >= 0.02 && m.coverage <= 0.4);
 if (errors.length || !metricPass || animationDifference < 0.002) process.exitCode = 1;
