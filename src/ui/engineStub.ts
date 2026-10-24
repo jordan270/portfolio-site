@@ -1,12 +1,15 @@
-export type ShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
+export type ShapeName = 'face' | 'india' | 'lens' | 'f1' | 'dust';
+type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 
 export interface ParticleEngine {
   /** Create canvas inside container, start render loop */
   mount(container: HTMLElement): void;
   /** Morph between two shapes. t is 0..1. Called every frame by scroll. */
-  setMorph(from: ShapeName, to: ShapeName, t: number): void;
+  setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
   /** Slow idle rotation/drift multiplier, default 1 */
   setEnergy(value: number): void;
+  /** Adaptive particle density quality */
+  setQuality(quality: 'high' | 'medium' | 'low' | 'auto'): void;
   resize(): void;
   dispose(): void;
 }
@@ -19,8 +22,16 @@ interface Point3D {
   size: number;
 }
 
+function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
+  if (name === 'sphere') return 'face';
+  if (name === 'map') return 'india';
+  if (name === 'helix') return 'lens';
+  if (name === 'galaxy') return 'dust';
+  return name;
+}
+
 export function createEngineStub(opts?: { count?: number }): ParticleEngine {
-  const dotCount = Math.min(opts?.count ?? 250, 400);
+  const dotCount = Math.min(opts?.count ?? 300, 500);
   console.log(`[engineStub] Initialized with count: ${dotCount}`);
 
   let containerEl: HTMLElement | null = null;
@@ -28,9 +39,8 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
   let ctx: CanvasRenderingContext2D | null = null;
   let rafId: number | null = null;
 
-  let currentFrom: ShapeName = 'sphere';
-  let currentTo: ShapeName = 'sphere';
-  let morphT = 0;
+  let currentFrom: ShapeName = 'face';
+  let currentTo: ShapeName = 'face';  let morphT = 0;
   let energy = 1;
   let idleAngle = 0;
 
@@ -43,52 +53,74 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       let y = 0;
       let z = 0;
 
-      if (shape === 'sphere') {
-        // Fibonacci sphere
-        const phi = Math.acos(1 - 2 * (i + 0.5) / count);
-        const theta = Math.PI * (1 + Math.sqrt(5)) * (i + 0.5);
-        x = Math.sin(phi) * Math.cos(theta);
-        y = Math.cos(phi);
-        z = Math.sin(phi) * Math.sin(theta);
-      } else if (shape === 'map') {
-        // Planar grid with slight topographical waves
-        const cols = Math.floor(Math.sqrt(count));
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        x = (col / (cols - 1) - 0.5) * 1.8;
-        y = (row / (cols - 1) - 0.5) * 1.2;
-        z = Math.sin(x * 4) * Math.cos(y * 4) * 0.2;
-      } else if (shape === 'helix') {
-        // Double helix
-        const strand = i % 2 === 0 ? 1 : -1;
-        const angle = u * Math.PI * 8;
-        x = Math.cos(angle) * 0.6 * strand;
-        y = (u - 0.5) * 1.8;
-        z = Math.sin(angle) * 0.6 * strand;
+      if (shape === 'face') {
+        // Holographic face profile
+        const theta = u * Math.PI * 2;
+        const phi = (i % 20) / 20 * Math.PI;
+        x = Math.sin(phi) * Math.cos(theta) * 0.75;
+        y = (Math.cos(phi) * 1.1) + Math.sin(x * 3) * 0.1;
+        z = Math.sin(phi) * Math.sin(theta) * 0.6;
+      } else if (shape === 'india') {
+        // India shape: castle/tower silhouette with concentric rings
+        if (i < count * 0.3) {
+          // Base range rings
+          const r = 0.5 + (i % 2) * 0.4;
+          const a = (i / (count * 0.3)) * Math.PI * 2;
+          x = Math.cos(a) * r;
+          y = -0.9;
+          z = Math.sin(a) * r;
+        } else {
+          // India shape cylinder
+          const tH = (i - count * 0.3) / (count * 0.7);
+          const a = tH * Math.PI * 14;
+          const r = 0.38;
+          x = Math.cos(a) * r;
+          y = (tH - 0.5) * 1.6;
+          z = Math.sin(a) * r;
+        }
+      } else if (shape === 'lens') {
+        // Magnifying glass: ring + handle at 45 deg
+        if (i < count * 0.75) {
+          const a = (i / (count * 0.75)) * Math.PI * 2;
+          const r = 0.65;
+          x = Math.cos(a) * r;
+          y = Math.sin(a) * r;
+          z = (Math.random() - 0.5) * 0.1;
+        } else {
+          // Handle at 45 deg
+          const hP = (i - count * 0.75) / (count * 0.25);
+          x = 0.45 + hP * 0.6;
+          y = -0.45 - hP * 0.6;
+          z = 0;
+        }
+      } else if (shape === 'f1') {
+        // Elongated F1 car silhouette
+        x = (u - 0.5) * 2.2;
+        const bodyY = Math.sin(u * Math.PI) * 0.3;
+        y = bodyY - 0.3;
+        z = (Math.sin(u * 12) * 0.35) * (1 - Math.abs(u - 0.5));
       } else {
-        // Galaxy spiral
-        const arms = 3;
-        const armIndex = i % arms;
-        const r = Math.pow(u, 0.6) * 1.0;
-        const theta = (armIndex * 2 * Math.PI / arms) + r * 5;
-        x = r * Math.cos(theta);
-        y = (Math.random() - 0.5) * 0.15;
-        z = r * Math.sin(theta);
+        // Dust: loose, wide, flat drifting field of sparse particles
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.sqrt(Math.random()) * 1.6;
+        x = Math.cos(angle) * dist;
+        y = (Math.random() - 0.5) * 0.5;
+        z = Math.sin(angle) * dist;
       }
 
-      // Varied opacities per SPEC (0.35 to 1.0)
-      const alpha = 0.35 + (i * 13 % 65) / 100;
-      const size = 1.2 + (i * 7 % 20) / 10;
+      const alpha = 0.35 + (i * 17 % 65) / 100;
+      const size = 1.2 + (i * 7 % 18) / 10;
       points.push({ x, y, z, alpha, size });
     }
     return points;
   };
 
   const shapes: Record<ShapeName, Point3D[]> = {
-    sphere: generateShapePoints('sphere', dotCount),
-    map: generateShapePoints('map', dotCount),
-    helix: generateShapePoints('helix', dotCount),
-    galaxy: generateShapePoints('galaxy', dotCount),
+    face: generateShapePoints('face', dotCount),
+    india: generateShapePoints('india', dotCount),
+    lens: generateShapePoints('lens', dotCount),
+    f1: generateShapePoints('f1', dotCount),
+    dust: generateShapePoints('dust', dotCount),
   };
 
   const resize = () => {
@@ -126,18 +158,15 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       const pA = fromPts[i];
       const pB = toPts[i];
 
-      // Interpolate position between from and to shapes
       const px = pA.x + (pB.x - pA.x) * morphT;
       const py = pA.y + (pB.y - pA.y) * morphT;
       const pz = pA.z + (pB.z - pA.z) * morphT;
 
-      // Apply idle rotation around Y axis
       const cosA = Math.cos(idleAngle);
       const sinA = Math.sin(idleAngle);
       const rx = px * cosA - pz * sinA;
       const rz = px * sinA + pz * cosA;
 
-      // Simple perspective projection
       const fov = 2.5;
       const zDist = fov / (fov + rz * 0.6);
       const screenX = cx + rx * scale * zDist;
@@ -171,16 +200,20 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       console.log('[engineStub] Mounted in container');
     },
 
-    setMorph(from: ShapeName, to: ShapeName, t: number) {
-      currentFrom = from;
-      currentTo = to;
+    setMorph(from, to, t) {
+      currentFrom = normalizeShape(from);
+      currentTo = normalizeShape(to);
       morphT = Math.max(0, Math.min(1, t));
-      console.log(`[engineStub] setMorph: ${from} -> ${to} (t: ${morphT.toFixed(3)})`);
+      console.log(`[engineStub] setMorph: ${currentFrom} -> ${currentTo} (t: ${morphT.toFixed(3)})`);
     },
 
     setEnergy(value: number) {
       energy = value;
       console.log(`[engineStub] setEnergy: ${value}`);
+    },
+
+    setQuality(quality: 'high' | 'medium' | 'low' | 'auto') {
+      console.log(`[engineStub] setQuality: ${quality}`);
     },
 
     resize,

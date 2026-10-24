@@ -1,18 +1,21 @@
 /* ==========================================================================
    Design Tokens (per SPEC.md)
    - Background: #26262b
-   - Particles/text: white, opacity 0.35 to 1.0
+   - Particles and text: white, opacity 0.35 to 1.0
    - Font: Inter (weights 300/400), tight letter-spacing (-0.02em)
-   - Text size: clamp(1.25rem, 2.2vw, 2rem). Max 3 lines per block.
-   - One accent only: glowing white comet
-   - No colors, no gradients, no UI chrome. Generous empty space.
+   - Text size: clamp(1.25rem, 2.2vw, 2rem), max 3 lines per paragraph
+   - Only accent: small green dot (#21e065) beside "Open to internships"
+   - One glowing white comet follows cursor (desktop only)
+   - No other colours, no gradients, no UI chrome. Generous empty space.
+   - Respect prefers-reduced-motion everywhere.
    ========================================================================== */
 
 :root {
   --bg-color: #26262b;
   --text-color: #ffffff;
-  --text-muted: rgba(255, 255, 255, 0.65);
-  --text-dim: rgba(255, 255, 255, 0.4);
+  --text-muted: rgba(255, 255, 255, 0.72);
+  --text-dim: rgba(255, 255, 255, 0.45);
+  --accent-green: #21e065;
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --letter-spacing: -0.02em;
   --font-size-body: clamp(1.25rem, 2.2vw, 2rem);
@@ -96,54 +99,83 @@ html.lenis, html.lenis body {
   min-height: 100vh;
 }
 
-/* Sections: min-height 100vh (hero 120vh) */
+/* Section Heights per SPEC:
+   hero 120vh, project sections 110vh, contact 100vh */
 .section {
   position: relative;
   width: 100%;
-  min-height: 100vh;
   display: flex;
   align-items: center;
   box-sizing: border-box;
-  padding: 0 10vw;
+  padding: 0 9vw;
 }
 
 .section--hero {
   min-height: 120vh;
-  justify-content: center;
-  text-align: center;
-}
-
-.section--place {
   justify-content: flex-start;
   text-align: left;
 }
 
-.section--craft {
+.section--autopilot {
+  min-height: 110vh;
   justify-content: flex-end;
   text-align: right;
 }
 
-.section--more {
+.section--lens {
+  min-height: 110vh;
   justify-content: flex-start;
   text-align: left;
 }
 
-/* Content blocks */
-.content-block {
-  max-width: 34rem;
-  width: 100%;
+.section--f1 {
+  min-height: 110vh;
+  justify-content: flex-end;
+  text-align: right;
 }
 
-.section--hero .content-block {
-  max-width: 48rem;
+.section--contact {
+  min-height: 100vh;
+  justify-content: center;
+  text-align: center;
+  padding: 0 6vw;
+}
+
+/* Content blocks with subtle local backdrop to ensure contrast over particles */
+.content-block {
+  max-width: 36rem;
+  width: 100%;
+  position: relative;
+  /* Soft local backdrop vignette (no boxes) for particle contrast */
+  background: radial-gradient(ellipse 95% 95% at 50% 50%, rgba(38, 38, 43, 0.55) 0%, rgba(38, 38, 43, 0) 80%);
+  padding: 1.5rem 1rem;
+}
+
+.section--contact .content-block {
+  max-width: 44rem;
   margin: 0 auto;
 }
 
-.section--craft .content-block {
+.section--autopilot .content-block,
+.section--f1 .content-block {
   margin-left: auto;
 }
 
-/* Typography per SPEC.md */
+/* Typography with faint text-shadow for contrast over particles */
+h1, h2, p, .section-label, .quiet-link, .status-text, .badge {
+  text-shadow: 0 1px 12px rgba(22, 22, 26, 0.85), 0 2px 24px rgba(22, 22, 26, 0.65);
+}
+
+.section-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.65rem;
+}
+
 h1, h2 {
   font-weight: 400;
   letter-spacing: var(--letter-spacing);
@@ -151,39 +183,141 @@ h1, h2 {
 }
 
 h1 {
-  font-size: clamp(2rem, 4.5vw, 4rem);
+  font-size: clamp(2rem, 4.2vw, 3.8rem);
   line-height: 1.1;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 h2 {
-  font-size: clamp(1.6rem, 3.2vw, 2.75rem);
+  font-size: clamp(1.6rem, 3.1vw, 2.6rem);
   line-height: 1.18;
   margin-bottom: 0.85rem;
 }
 
 p {
   font-size: var(--font-size-body);
-  line-height: 1.35;
+  line-height: 1.38;
   font-weight: 300;
   color: var(--text-muted);
-  max-width: 32ch;
 }
 
-.subtitle {
-  font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-  color: var(--text-muted);
+.contact-lead {
+  font-size: clamp(1.35rem, 2.5vw, 2.15rem);
+  line-height: 1.35;
+  color: var(--text-color);
+  max-width: 34ch;
+  margin: 0 auto 2.2rem;
+}
+
+/* Badge for AutoPilot */
+.badge-wrapper {
+  margin-bottom: 0.65rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Status indicator (green dot + Open to internships) */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--accent-green);
+  box-shadow: 0 0 10px rgba(33, 224, 101, 0.75);
+}
+
+.status-text {
+  font-size: 0.95rem;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Tags line */
+.tags-line {
+  font-size: 0.875rem;
+  font-weight: 300;
+  color: var(--text-dim);
+  letter-spacing: -0.01em;
+  margin-top: 0.9rem;
+  line-height: 1.3;
+}
+
+/* Quiet text links */
+.links-line {
+  margin-top: 0.9rem;
+}
+
+.links-inline, .contact-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.text-right .links-inline {
+  justify-content: flex-end;
+}
+
+.text-center .contact-links {
+  justify-content: center;
+}
+
+.separator {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.quiet-link {
+  color: var(--text-color);
+  opacity: 0.75;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 0.95rem;
+  font-weight: 300;
+  transition: opacity 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.quiet-link:hover {
+  opacity: 1;
+}
+
+/* Visible focus styles on all links */
+a:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* CS50 footer */
+.cs50-footer {
+  margin-top: 3.5rem;
+}
+
+.footer-copy {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-dim);
   font-weight: 300;
   margin: 0 auto;
-}
-
-.text-center p {
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.text-right p {
-  margin-left: auto;
 }
 
 /* Text reveal wrapper lines */
@@ -199,33 +333,12 @@ p {
 }
 
 /* ==========================================================================
-   Footer
-   ========================================================================== */
-
-.site-footer {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  padding: 6rem 2rem 4rem;
-  text-align: center;
-}
-
-.footer-copy {
-  font-size: 0.875rem;
-  line-height: 1.4;
-  color: var(--text-dim);
-  font-weight: 300;
-  margin: 0 auto;
-}
-
-/* ==========================================================================
    Mobile Responsiveness (down to 360px)
    "On mobile, text sits in the bottom third so the shape stays visible."
    ========================================================================== */
 
 @media (max-width: 768px) {
   .section {
-    min-height: 100vh;
     padding: 0 1.5rem calc(8vh + 1.5rem) 1.5rem;
     align-items: flex-end;
   }
@@ -235,25 +348,47 @@ p {
     padding-bottom: calc(10vh + 2rem);
   }
 
-  .section--craft {
+  .section--autopilot,
+  .section--lens,
+  .section--f1 {
+    min-height: 110vh;
+  }
+
+  .section--contact {
+    min-height: 100vh;
+  }
+
+  /* Reset right-alignment on mobile for natural reading flow */
+  .section--autopilot,
+  .section--f1 {
     justify-content: flex-start;
     text-align: left;
   }
 
-  .section--craft .content-block {
+  .section--autopilot .content-block,
+  .section--f1 .content-block {
     margin-left: 0;
   }
 
-  .text-right p {
-    margin-left: 0;
+  .text-right .links-inline {
+    justify-content: flex-start;
   }
 
   .content-block {
     max-width: 100%;
+    padding: 1rem 0;
   }
 
   p {
     max-width: 100%;
+  }
+
+  .contact-lead {
+    margin-bottom: 1.5rem;
+  }
+
+  .cs50-footer {
+    margin-top: 2.5rem;
   }
 }
 
