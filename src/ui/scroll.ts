@@ -54,16 +54,16 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
 
     // Check where viewportCenter falls relative to adjacent midpoints
     if (viewportCenter <= midpoints[0]) {
-      const from = (sectionElements[0].dataset.shape || 'sphere') as ShapeName;
-      const to = (sectionElements[1].dataset.shape || 'map') as ShapeName;
+      const from = (sectionElements[0].dataset.shape || 'face') as ShapeName;
+      const to = (sectionElements[1].dataset.shape || 'india') as ShapeName;
       onProgress(from, to, 0);
       return;
     }
 
     const lastIdx = midpoints.length - 1;
     if (viewportCenter >= midpoints[lastIdx]) {
-      const from = (sectionElements[lastIdx - 1].dataset.shape || 'helix') as ShapeName;
-      const to = (sectionElements[lastIdx].dataset.shape || 'galaxy') as ShapeName;
+      const from = (sectionElements[lastIdx - 1].dataset.shape || 'f1') as ShapeName;
+      const to = (sectionElements[lastIdx].dataset.shape || 'dust') as ShapeName;
       onProgress(from, to, 1);
       return;
     }
@@ -73,8 +73,8 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
       const midB = midpoints[i + 1];
 
       if (viewportCenter >= midA && viewportCenter <= midB) {
-        const from = (sectionElements[i].dataset.shape || 'sphere') as ShapeName;
-        const to = (sectionElements[i + 1].dataset.shape || 'map') as ShapeName;
+        const from = (sectionElements[i].dataset.shape || 'face') as ShapeName;
+        const to = (sectionElements[i + 1].dataset.shape || 'india') as ShapeName;
         const t = (viewportCenter - midA) / (midB - midA);
         onProgress(from, to, Math.max(0, Math.min(1, t)));
         return;
@@ -86,8 +86,8 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
   for (let i = 0; i < sectionElements.length - 1; i++) {
     const current = sectionElements[i];
     const next = sectionElements[i + 1];
-    const fromShape = (current.dataset.shape || 'sphere') as ShapeName;
-    const toShape = (next.dataset.shape || 'map') as ShapeName;
+    const fromShape = (current.dataset.shape || 'face') as ShapeName;
+    const toShape = (next.dataset.shape || 'india') as ShapeName;
 
     const st = ScrollTrigger.create({
       trigger: current,

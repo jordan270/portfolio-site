@@ -8,17 +8,24 @@ interface TrailPoint {
 }
 
 export function initComet(canvasSelector: string = '#comet-canvas'): CometController {
-  // Hide and disable completely on touch devices
-  const isTouchDevice =
-    window.matchMedia('(pointer: coarse)').matches ||
-    window.matchMedia('(hover: none)').matches ||
-    'ontouchstart' in window;
-
   const canvas = document.querySelector<HTMLCanvasElement>(canvasSelector);
   if (!canvas) {
     console.warn(`[comet] Canvas not found: ${canvasSelector}`);
     return { destroy: () => {} };
   }
+
+  // Skip completely under prefers-reduced-motion per SPEC
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) {
+    canvas.style.display = 'none';
+    return { destroy: () => {} };
+  }
+
+  // Hide and disable on touch devices
+  const isTouchDevice =
+    window.matchMedia('(pointer: coarse)').matches ||
+    window.matchMedia('(hover: none)').matches ||
+    'ontouchstart' in window;
 
   if (isTouchDevice) {
     canvas.style.display = 'none';
