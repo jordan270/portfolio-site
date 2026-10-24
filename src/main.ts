@@ -3,8 +3,7 @@ import './style.css';
 // Switch between the stub and the real engine using one constant, USE_STUB, at the top of main.ts
 export const USE_STUB = true;
 
-// @ts-expect-error Real engine is built on another branch until merged
-import createEngine, { createEngine as createEngineNamed } from './engine';
+import { createEngine } from './engine/index.ts';
 import { createEngineStub } from './ui/engineStub';
 import { initScroll } from './ui/scroll';
 import { initComet } from './ui/comet';
@@ -18,7 +17,7 @@ function initApp(): void {
   }
 
   // 1. Initialize Engine (stub or real)
-  const factory = USE_STUB ? createEngineStub : (createEngine ?? createEngineNamed);
+  const factory = USE_STUB ? createEngineStub : createEngine;
   const engine = factory();
   engine.mount(stage);
 

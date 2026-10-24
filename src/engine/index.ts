@@ -44,7 +44,8 @@ void main() {
   p.y -= uParallax * 0.08;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = clamp(aSize * uPixelRatio * (2.8 / max(0.1, -mvPosition.z)) * uSizeScale, 1.0, 5.0);
+  float maxPointSize = mix(3.0, 5.0, step(2.0, aSize));
+  gl_PointSize = clamp(aSize * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale, 1.0, maxPointSize);
   vSeed = aSeed;
   vEdge = 1.0 - smoothstep(0.0, 0.38, abs(length(p) - 0.82));
 }`;
@@ -59,9 +60,9 @@ void main() {
   float r = length(q);
   if (r > 0.5) discard;
   float falloff = 1.0 - smoothstep(0.12, 0.5, r);
-  float variation = mix(0.2, 0.7, fract(vSeed * 43758.5453));
-  float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.7);
-  float rim = mix(0.78, 1.2, vEdge);
+  float variation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
+  float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.5);
+  float rim = mix(1.25, 2.0, vEdge);
   gl_FragColor = vec4(vec3(rim), min(1.0, falloff * opacity));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -69,11 +70,12 @@ void main() {
 
 export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
+  const deviceMemory = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory : undefined;
+  const preferMedium = mobile || (typeof navigator !== 'undefined' && (navigator.hardwareConcurrency <= 4 || (deviceMemory !== undefined && deviceMemory <= 4)));
   const qualityCounts = { high: 60_000, medium: 30_000, low: 12_000 } as const;
   let quality: 'high' | 'medium' | 'low' | 'auto' = 'auto';
-  let count = Math.max(1000, Math.floor(opts.count ?? (mobile ? qualityCounts.medium : qualityCounts.high)));
+  let count = Math.max(1000, Math.floor(opts.count ?? (preferMedium ? qualityCounts.medium : qualityCounts.high)));
   const customCount = opts.count !== undefined;
-  let pixelRatio = 1;
   let frameAverage = 16.7;
   let slowFrames = 0, fastFrames = 0;
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -116,7 +118,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     const seeds = new Float32Array(count), sizes = new Float32Array(count);
     for (let i = 0; i < count; i++) {
       seeds[i] = Math.random();
-      sizes[i] = Math.random() < 0.03 ? 2.1 + Math.random() * 0.45 : 0.9 + Math.random() * 0.85;
+      sizes[i] = Math.random() < 0.03 ? 2.3 + Math.random() * 0.6 : 1.05 + Math.random() * 0.95;
     }
     geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
@@ -134,8 +136,8 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         const currentTier = count >= qualityCounts.high ? 'high' : count >= qualityCounts.medium ? 'medium' : 'low';
         setCount(qualityCounts[currentTier === 'high' ? 'medium' : 'low']);
         slowFrames = 0; fastFrames = 0;
-      } else if (fastFrames >= 600 && count < (mobile ? qualityCounts.medium : qualityCounts.high)) {
-        setCount(Math.min(mobile ? qualityCounts.medium : qualityCounts.high, count === qualityCounts.low ? qualityCounts.medium : qualityCounts.high));
+      } else if (fastFrames >= 600 && count < (preferMedium ? qualityCounts.medium : qualityCounts.high)) {
+        setCount(Math.min(preferMedium ? qualityCounts.medium : qualityCounts.high, count === qualityCounts.low ? qualityCounts.medium : qualityCounts.high));
         slowFrames = 0; fastFrames = 0;
       }
     }
@@ -175,18 +177,18 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       geometry.setAttribute('positionA', new THREE.BufferAttribute(getShape('sphere'), 3));
       geometry.setAttribute('positionB', new THREE.BufferAttribute(getShape('sphere'), 3));
       const seeds = new Float32Array(count), sizes = new Float32Array(count);
-      for (let i = 0; i < count; i++) { seeds[i] = Math.random(); sizes[i] = Math.random() < 0.03 ? 2.1 + Math.random() * 0.45 : 0.9 + Math.random() * 0.85; }
+      for (let i = 0; i < count; i++) { seeds[i] = Math.random(); sizes[i] = Math.random() < 0.03 ? 2.3 + Math.random() * 0.6 : 1.05 + Math.random() * 0.95; }
       geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
       geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 0.62 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 0.8 } },
+        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uParallax: { value: 0 }, uOpacity: { value: 1 }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
       renderer.setPixelRatio(pixelRatio);
       renderer.setClearColor(0x26262b, 1);
       renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;';
@@ -215,7 +217,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     setQuality(value) {
       quality = value;
       if (value === 'auto') {
-        if (!customCount) setCount(mobile ? qualityCounts.medium : qualityCounts.high);
+        if (!customCount) setCount(preferMedium ? qualityCounts.medium : qualityCounts.high);
       } else setCount(qualityCounts[value]);
       slowFrames = 0; fastFrames = 0;
     },

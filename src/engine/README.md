@@ -4,7 +4,7 @@
 
 The default quality is `auto`: it starts at 60,000 particles, or 30,000 when the viewport is at most 700px wide. Auto mode steps down after sustained frame times above 24ms and can step back up after sustained fast frames. Call `setQuality('high' | 'medium' | 'low' | 'auto')` to choose 60,000, 30,000, 12,000, or adaptive quality. Pass `{ count }` to pin a custom count and disable adaptive resizing. DPR is capped at 2. Rendering pauses while the document is hidden. With `prefers-reduced-motion: reduce`, transition, rotation, breathing, and noise are disabled and the source shape stays visible.
 
-The engine uses one `THREE.Points` object and a custom shader. Position A/B, seed, and size are geometry attributes; morphing and transition displacement happen in the vertex shader. Point size is depth attenuated, DPR scaled, and clamped to 1–5 device pixels; 3% of particles use the larger sparkle range. The fragment shader clips soft white additive sprites to a circle, keeps alpha capped at 0.7, varies opacity by seed, and brightens the sphere silhouette. The renderer clears to `#26262b`.
+The engine uses one `THREE.Points` object and a custom shader. Position A/B, seed, and size are geometry attributes; morphing and transition displacement happen in the vertex shader. Point size uses a `4.5 / viewDepth` attenuation factor, scales with DPR, and clamps normal dots to 1–3 device pixels; 3% of particles use the larger sparkle range up to 5px. The fragment shader clips soft white additive sprites to a circle, keeps per-particle alpha capped at 0.5, varies opacity by seed, and brightens the sphere silhouette. The renderer clears to `#26262b`.
 
 ## Tuning the look
 
