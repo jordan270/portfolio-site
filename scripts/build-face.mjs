@@ -1,162 +1,245 @@
-import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { PNG } from 'pngjs';
 import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const photoPath = path.join(root, 'private', 'face.jpg');
+const photoPath = path.resolve(process.argv[2] ?? path.join(root, 'private', 'face.jpg'));
 const outPath = path.join(root, 'public', 'shapes', 'face.bin');
-if (!existsSync(photoPath)) throw new Error('Photo not found. Put a front-facing image at private/face.jpg, then rerun this script.');
-
-const require = createRequire(import.meta.url);
-let visionEntry;
-try { visionEntry = require.resolve('@mediapipe/tasks-vision'); }
-catch { throw new Error('MediaPipe is not installed. Run `npm install --no-save @mediapipe/tasks-vision` once, then rerun `node scripts/build-face.mjs`.'); }
-const visionDir = path.dirname(visionEntry);
-const wasmDir = path.join(visionDir, 'wasm');
-const modelPath = path.join(os.tmpdir(), 'particle-site-face-landmarker.task');
-const modelUrl = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-if (!existsSync(modelPath)) {
-  const response = await fetch(modelUrl);
-  if (!response.ok) throw new Error(`Could not download Face Landmarker model (${response.status})`);
-  await writeFile(modelPath, Buffer.from(await response.arrayBuffer()));
+const previewPath = path.join(root, 'debug', 'face-preview.png');
+const modelName = 'onnx-community/depth-anything-v2-small-ONNX';
+if (!existsSync(photoPath)) {
+  throw new Error(`Photo not found at ${photoPath}. Put it at private/face.jpg, or pass a photo path: node scripts/build-face.mjs <path>`);
 }
-const photo = await readFile(photoPath);
 
-const html = `<!doctype html><meta charset="utf-8"><img id="photo" src="/face.jpg" style="display:none"><script type="module">
-import { FilesetResolver, FaceLandmarker } from '/vision_bundle.mjs';
+let pipeline;
 try {
-  const files = await FilesetResolver.forVisionTasks('/wasm');
-  const landmarker = await FaceLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: '/model.task' }, runningMode: 'IMAGE', numFaces: 1 });
-  const image = document.querySelector('#photo');
-  if (!image.complete || !image.naturalWidth) await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
-  const result = landmarker.detect(image);
-  if (!result.faceLandmarks?.length) throw new Error('No face detected. Use a clear, front-facing photo.');
-  const landmarks = result.faceLandmarks[0].slice(0, 468).map(({ x, y, z }) => ({ x, y, z }));
-  const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(image, 0, 0);
-  window.__faceResult = { landmarks, width: canvas.width, height: canvas.height, rgba: Array.from(ctx.getImageData(0, 0, canvas.width, canvas.height).data) };
-} catch (error) { window.__faceError = error?.stack || String(error); }
-</script>`;
+  ({ pipeline } = await import('@huggingface/transformers'));
+} catch (error) {
+  throw new Error(`Depth-estimation package is missing. Install it with: npm install --no-save --package-lock=false @imgly/background-removal-node @huggingface/transformers\n${String(error)}`);
+}
 
-const server = createServer(async (req, res) => {
-  try {
-    const pathname = new URL(req.url, 'http://localhost').pathname;
-    if (pathname === '/') { res.writeHead(200, { 'content-type': 'text/html' }); res.end(html); }
-    else if (pathname === '/face.jpg') { res.writeHead(200, { 'content-type': 'image/jpeg' }); res.end(photo); }
-    else if (pathname === '/model.task') { res.writeHead(200, { 'content-type': 'application/octet-stream' }); res.end(await readFile(modelPath)); }
-    else if (pathname === '/vision_bundle.mjs') { res.writeHead(200, { 'content-type': 'text/javascript' }); res.end(await readFile(visionEntry)); }
-    else if (pathname.startsWith('/wasm/')) {
-      const filename = path.basename(pathname.slice('/wasm/'.length));
-      const contentType = filename.endsWith('.wasm') ? 'application/wasm' : 'text/javascript';
-      res.writeHead(200, { 'content-type': contentType }); res.end(await readFile(path.join(wasmDir, filename)));
-    } else { res.writeHead(404); res.end('Not found'); }
-  } catch (error) { res.writeHead(500); res.end(String(error)); }
-});
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const address = server.address();
-const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage();
-await page.goto(`http://127.0.0.1:${address.port}/`);
-await page.waitForFunction(() => window.__faceResult || window.__faceError, null, { timeout: 120_000 });
-const result = await page.evaluate(() => ({ result: window.__faceResult, error: window.__faceError }));
-await browser.close();
-await new Promise((resolve) => server.close(resolve));
-if (result.error) throw new Error(result.error);
-
-const { landmarks, width, height, rgba } = result.result;
-const oval = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
-const polygon = oval.map((index) => landmarks[index]);
-const minX = Math.min(...polygon.map((p) => p.x)), maxX = Math.max(...polygon.map((p) => p.x));
-const chinY = Math.max(...polygon.map((p) => p.y));
-const pointInPolygon = (x, y) => {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i], b = polygon[j];
-    if (((a.y > y) !== (b.y > y)) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y + 1e-12) + a.x) inside = !inside;
+console.log(`Reading photo: ${photoPath}`);
+const cutoutPath = path.join(tmpdir(), `particle-face-cutout-${randomUUID()}.png`);
+try {
+  const helper = path.join(root, 'scripts', 'remove-face-background.mjs');
+  const result = spawnSync(process.execPath, [helper, photoPath, cutoutPath], { stdio: 'inherit' });
+  if (result.error || result.status !== 0) {
+    throw new Error(String(result.error ?? `background helper exited with status ${result.status}`));
   }
-  return inside;
-};
-
-// Bowyer-Watson Delaunay triangulation of the Face Landmarker mesh.
-const vertices = [...landmarks];
-const span = Math.max(maxX - minX, chinY - Math.min(...polygon.map((p) => p.y)));
-for (let row = 1; row <= 5; row++) for (let col = 0; col <= 8; col++) {
-  vertices.push({ x: minX + (maxX - minX) * col / 8, y: chinY + span * 0.2 * row / 5, z: (landmarks[152].z || 0) * (1 - row / 8) });
+} catch (error) {
+  throw new Error(`Background-removal package/model failed. Install with npm install --no-save --package-lock=false @imgly/background-removal-node @huggingface/transformers and check network access.\n${String(error)}`);
 }
-const coords = vertices.map((p) => [p.x, p.y]);
-const allX = coords.map((p) => p[0]), allY = coords.map((p) => p[1]);
-const loX = Math.min(...allX), hiX = Math.max(...allX), loY = Math.min(...allY), hiY = Math.max(...allY);
-const d = Math.max(hiX - loX, hiY - loY) * 20;
-const centerX = (loX + hiX) / 2, centerY = (loY + hiY) / 2;
-const realCount = coords.length;
-coords.push([centerX - d, centerY - d], [centerX, centerY + d], [centerX + d, centerY - d]);
-let triangles = [[realCount, realCount + 1, realCount + 2]];
-const circumcircleContains = (tri, p) => {
-  const [a, b, c] = tri.map((i) => coords[i]);
-  const ax = a[0] - p[0], ay = a[1] - p[1], bx = b[0] - p[0], by = b[1] - p[1], cx = c[0] - p[0], cy = c[1] - p[1];
-  const det = (ax*ax+ay*ay)*(bx*cy-by*cx) - (bx*bx+by*by)*(ax*cy-ay*cx) + (cx*cx+cy*cy)*(ax*by-ay*bx);
-  const orient = (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
-  return orient > 0 ? det > 0 : det < 0;
+const cutoutPng = PNG.sync.read(await readFile(cutoutPath));
+await unlink(cutoutPath).catch(() => {});
+
+console.log(`Loading Depth Anything V2 Small (${modelName}); model files download on the first run...`);
+const progress = (label) => (event) => {
+  progress.last ??= new Map();
+  if (!event || typeof event !== 'object') return;
+  const file = event.file ?? event.name ?? 'model';
+  const loaded = Number(event.loaded ?? event.progress ?? 0), total = Number(event.total ?? 0);
+  const percent = total > 0 ? ` ${Math.round(loaded / total * 100)}%` : '';
+  const line = `[${label}] ${file}${percent}`;
+  if (progress.last.get(line) === line) return;
+  progress.last.set(line, line);
+  console.log(line);
 };
-for (let p = 0; p < realCount; p++) {
-  const bad = [], edges = new Map();
-  for (let t = 0; t < triangles.length; t++) if (circumcircleContains(triangles[t], coords[p])) bad.push(t);
-  for (const t of bad) for (const [a, b] of [[triangles[t][0],triangles[t][1]],[triangles[t][1],triangles[t][2]],[triangles[t][2],triangles[t][0]]]) {
-    const key = a < b ? `${a},${b}` : `${b},${a}`; const edge = edges.get(key);
-    if (edge) edge.count++; else edges.set(key, { a, b, count: 1 });
+let estimateDepth;
+try {
+  estimateDepth = await pipeline('depth-estimation', modelName, {
+    device: 'cpu',
+    progress_callback: progress('depth model'),
+  });
+} catch (error) {
+  throw new Error(`Depth Anything V2 Small model download/load failed. Check network access, then rerun the build command.\n${String(error)}`);
+}
+let depthResult;
+try {
+  depthResult = await estimateDepth(photoPath);
+} catch (error) {
+  throw new Error(`Depth Anything V2 Small inference failed for ${photoPath}.\n${String(error)}`);
+}
+const depthImage = depthResult.depth;
+if (!depthImage?.data?.length || !depthImage.width || !depthImage.height) {
+  throw new Error('Depth Anything V2 Small returned no usable depth image.');
+}
+
+// Browser decoding keeps the script independent of extra JPEG/PNG native addons.
+const sourcePhoto = await readFile(photoPath);
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+let sourcePng;
+try {
+  const page = await browser.newPage();
+  const dataUrl = `data:image/jpeg;base64,${sourcePhoto.toString('base64')}`;
+  await page.setContent(`<img id="photo" src="${dataUrl}">`);
+  const decoded = await page.evaluate(async () => {
+    const image = document.querySelector('#photo');
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    canvas.getContext('2d').drawImage(image, 0, 0);
+    return { width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL('image/png') };
+  });
+  sourcePng = PNG.sync.read(Buffer.from(decoded.dataUrl.split(',')[1], 'base64'));
+} finally {
+  await browser.close();
+}
+
+const width = sourcePng.width;
+const height = sourcePng.height;
+const sourceLum = new Float32Array(width * height);
+const alpha = new Uint8Array(width * height);
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+  const sourceIndex = (y * sourcePng.width + x) * 4;
+  const index = y * width + x;
+  sourceLum[index] = (0.2126 * sourcePng.data[sourceIndex] + 0.7152 * sourcePng.data[sourceIndex + 1] + 0.0722 * sourcePng.data[sourceIndex + 2]) / 255;
+  const mx = Math.min(cutoutPng.width - 1, Math.floor((x + 0.5) / width * cutoutPng.width));
+  const my = Math.min(cutoutPng.height - 1, Math.floor((y + 0.5) / height * cutoutPng.height));
+  alpha[index] = cutoutPng.data[(my * cutoutPng.width + mx) * 4 + 3];
+}
+
+// Ignore disconnected mask specks while preserving the largest continuous person silhouette.
+const componentSeen = new Uint8Array(alpha.length), queue = new Int32Array(alpha.length);
+let largestComponent = [];
+for (let start = 0; start < alpha.length; start++) {
+  if (alpha[start] < 70 || componentSeen[start]) continue;
+  let head = 0, tail = 0;
+  const members = [];
+  queue[tail++] = start; componentSeen[start] = 1;
+  while (head < tail) {
+    const index = queue[head++]; members.push(index);
+    const x = index % width;
+    const neighbours = [index - width, index + width, x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1];
+    for (const next of neighbours) {
+      if (next < 0 || next >= alpha.length || componentSeen[next] || alpha[next] < 70) continue;
+      componentSeen[next] = 1; queue[tail++] = next;
+    }
   }
-  const badSet = new Set(bad); triangles = triangles.filter((_, index) => !badSet.has(index));
-  for (const edge of edges.values()) if (edge.count === 1) triangles.push([edge.a, edge.b, p]);
+  if (members.length > largestComponent.length) largestComponent = members;
 }
-triangles = triangles.filter((tri) => tri.every((i) => i < realCount));
+const personPixels = new Uint8Array(alpha.length);
+for (const index of largestComponent) personPixels[index] = 1;
+for (let i = 0; i < alpha.length; i++) {
+  if (personPixels[i] || alpha[i] < 25) continue;
+  const x = i % width;
+  const nearPerson = personPixels[i - width] || personPixels[i + width] || (x > 0 && personPixels[i - 1]) || (x + 1 < width && personPixels[i + 1]);
+  if (!nearPerson) alpha[i] = 0;
+}
 
-const grayAndEdge = (p) => {
-  const px = Math.max(1, Math.min(width - 2, Math.round(p.x * width))), py = Math.max(1, Math.min(height - 2, Math.round(p.y * height)));
-  const lum = (x, y) => { const i = (y * width + x) * 4; return (0.2126*rgba[i] + 0.7152*rgba[i+1] + 0.0722*rgba[i+2]) / 255; };
-  const value = lum(px, py), edge = Math.min(1, (Math.abs(lum(px+1,py)-lum(px-1,py)) + Math.abs(lum(px,py+1)-lum(px,py-1))) * 3.2);
-  return { feature: 0.14 + (1 - value) * 0.68 + edge * 0.95, edge };
+const depthData = depthImage.data;
+const depthWidth = depthImage.width, depthHeight = depthImage.height;
+let depthMin = Infinity, depthMax = -Infinity;
+for (const value of depthData) { depthMin = Math.min(depthMin, value); depthMax = Math.max(depthMax, value); }
+if (!Number.isFinite(depthMin) || depthMax - depthMin < 1e-6) throw new Error('Depth map has no usable depth range.');
+const depth = new Float32Array(width * height);
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+  const dx = Math.min(depthWidth - 1, Math.floor((x + 0.5) / width * depthWidth));
+  const dy = Math.min(depthHeight - 1, Math.floor((y + 0.5) / height * depthHeight));
+  depth[y * width + x] = (depthData[dy * depthWidth + dx] - depthMin) / (depthMax - depthMin);
+}
+
+// A 5x5 Gaussian-like kernel softens model noise while preserving facial planes.
+const kernel = [1, 4, 6, 4, 1];
+const horizontal = new Float32Array(depth.length), smoothDepth = new Float32Array(depth.length);
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+  let sum = 0, weight = 0;
+  for (let k = -2; k <= 2; k++) {
+    const sx = Math.max(0, Math.min(width - 1, x + k)), w = kernel[k + 2];
+    sum += depth[y * width + sx] * w; weight += w;
+  }
+  horizontal[y * width + x] = sum / weight;
+}
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+  let sum = 0, weight = 0;
+  for (let k = -2; k <= 2; k++) {
+    const sy = Math.max(0, Math.min(height - 1, y + k)), w = kernel[k + 2];
+    sum += horizontal[sy * width + x] * w; weight += w;
+  }
+  smoothDepth[y * width + x] = sum / weight;
+}
+
+let minX = width, maxX = -1, minY = height, maxY = -1;
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+  if (alpha[y * width + x] <= 25) continue;
+  minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+}
+if (maxX < minX || maxY < minY) throw new Error('Background removal returned an empty person mask.');
+const personHeight = maxY - minY + 1;
+const centerX = (minX + maxX) / 2;
+const candidates = [], cumulative = [];
+let totalWeight = 0;
+for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+  const index = y * width + x;
+  if (alpha[index] <= 25) continue;
+  const left = sourceLum[y * width + Math.max(0, x - 1)], right = sourceLum[y * width + Math.min(width - 1, x + 1)];
+  const up = sourceLum[Math.max(0, y - 1) * width + x], down = sourceLum[Math.min(height - 1, y + 1) * width + x];
+  const contrast = (Math.abs(sourceLum[index] - left) + Math.abs(sourceLum[index] - right) + Math.abs(sourceLum[index] - up) + Math.abs(sourceLum[index] - down)) * 0.25;
+  const imageEdge = Math.min(1, Math.hypot(right - left, down - up) * 1.8);
+  const maskEdge = Math.min(1, Math.abs(alpha[index] - Math.min(alpha[y * width + Math.max(0, x - 1)], alpha[y * width + Math.min(width - 1, x + 1)], alpha[Math.max(0, y - 1) * width + x], alpha[Math.min(height - 1, y + 1) * width + x])) / 180);
+  const vertical = (y - minY) / personHeight;
+  const shoulderBottomFade = vertical > 0.62 ? 1 - 0.55 * smoothstep(0.62, 1, vertical) : 1;
+  const weight = (0.025 + contrast * 3.5 + imageEdge * 2.7 + maskEdge * 4.2) * (alpha[index] / 255) * shoulderBottomFade;
+  if (weight <= 0) continue;
+  totalWeight += weight;
+  candidates.push({ x, y, index });
+  cumulative.push(totalWeight);
+}
+if (candidates.length < 100 || !totalWeight) throw new Error('Person mask did not contain enough sampleable pixels.');
+
+let randomState = 0x4f1bbcdc;
+const random = () => {
+  randomState = (randomState * 1664525 + 1013904223) >>> 0;
+  return randomState / 0x100000000;
 };
-const weighted = [];
-let cumulative = 0;
-for (const tri of triangles) {
-  const points = tri.map((index) => vertices[index]);
-  const cx = points.reduce((sum,p)=>sum+p.x,0)/3, cy = points.reduce((sum,p)=>sum+p.y,0)/3;
-  const inFace = pointInPolygon(cx, cy);
-  const inNeck = cx >= minX && cx <= maxX && cy > chinY && cy < chinY + span * 0.2;
-  if (!inFace && !inNeck) continue;
-  const area = Math.abs((points[1].x-points[0].x)*(points[2].y-points[0].y) - (points[1].y-points[0].y)*(points[2].x-points[0].x)) / 2;
-  if (area < 1e-9) continue;
-  const feature = points.reduce((sum,p)=>sum+grayAndEdge(p).feature,0)/3;
-  const neckFade = inNeck ? Math.max(0.04, 1 - (cy - chinY) / (span * 0.2)) ** 2 : 1;
-  cumulative += area * feature * neckFade;
-  weighted.push({ tri: points, cumulative });
+const pointCount = 45_000;
+const output = new Float32Array(pointCount * 3);
+for (let i = 0; i < pointCount; i++) {
+  const target = random() * totalWeight;
+  let low = 0, high = cumulative.length - 1;
+  while (low < high) { const mid = (low + high) >> 1; if (cumulative[mid] < target) low = mid + 1; else high = mid; }
+  const pixel = candidates[low];
+  const x = pixel.x + random() - 0.5;
+  const y = pixel.y + random() - 0.5;
+  const vertical = Math.max(0, Math.min(1, (y - minY) / personHeight));
+  const zFalloff = vertical > 0.58 ? 1 - 0.68 * smoothstep(0.58, 1, vertical) : 1;
+  const z = smoothDepth[pixel.index] - 0.5;
+  output[i * 3] = (x - centerX) / personHeight;
+  output[i * 3 + 1] = 0.5 - (y - minY) / personHeight;
+  output[i * 3 + 2] = z * 0.25 * zFalloff;
 }
-if (!weighted.length || cumulative <= 0) throw new Error('Could not triangulate the detected face region.');
-const output = new Float32Array(40_000 * 3);
-for (let i = 0; i < 40_000; i++) {
-  const target = Math.random() * cumulative;
-  let low = 0, high = weighted.length - 1;
-  while (low < high) { const mid = (low + high) >> 1; if (weighted[mid].cumulative < target) low = mid + 1; else high = mid; }
-  const [a,b,c] = weighted[low].tri;
-  const root = Math.sqrt(Math.random()), v = Math.random();
-  const wa = 1-root, wb = root*(1-v), wc = root*v;
-  output[i*3] = wa*a.x + wb*b.x + wc*c.x;
-  output[i*3+1] = wa*a.y + wb*b.y + wc*c.y;
-  output[i*3+2] = wa*a.z + wb*b.z + wc*c.z;
+
+const preview = new PNG({ width: 1024, height: 1024 });
+for (let i = 0; i < preview.data.length; i += 4) {
+  preview.data[i] = 38; preview.data[i + 1] = 38; preview.data[i + 2] = 43; preview.data[i + 3] = 255;
 }
-let min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
-for (let i=0;i<output.length;i+=3) for (let axis=0;axis<3;axis++) { min[axis]=Math.min(min[axis],output[i+axis]); max[axis]=Math.max(max[axis],output[i+axis]); }
-const center = min.map((value,axis)=>(value+max[axis])/2), scale = Math.max(...max.map((value,axis)=>value-min[axis]));
-for (let i=0;i<output.length;i+=3) {
-  output[i]=(output[i]-center[0])/scale;
-  output[i+1]=-(output[i+1]-center[1])/scale;
-  output[i+2]=(output[i+2]-center[2])/scale;
+for (let i = 0; i < output.length; i += 3) {
+  const px = Math.round(512 + output[i] * 850);
+  const py = Math.round(512 - output[i + 1] * 850);
+  if (px < 1 || px >= 1023 || py < 1 || py >= 1023) continue;
+  const value = Math.round(145 + Math.min(0.11, Math.abs(output[i + 2])) * 900);
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    if (ox * ox + oy * oy > 1) continue;
+    const p = ((py + oy) * preview.width + px + ox) * 4;
+    preview.data[p] = Math.max(preview.data[p], value);
+    preview.data[p + 1] = Math.max(preview.data[p + 1], value);
+    preview.data[p + 2] = Math.max(preview.data[p + 2], value);
+  }
 }
+
 await mkdir(path.dirname(outPath), { recursive: true });
+await mkdir(path.dirname(previewPath), { recursive: true });
 await writeFile(outPath, Buffer.from(output.buffer));
-console.log(`Wrote ${output.length/3} face points to public/shapes/face.bin`);
+await writeFile(previewPath, PNG.sync.write(preview));
+console.log(`Wrote ${pointCount.toLocaleString()} photo-derived head-and-shoulders points to public/shapes/face.bin`);
+console.log(`Wrote front projection preview to debug/face-preview.png`);
+
+function smoothstep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}

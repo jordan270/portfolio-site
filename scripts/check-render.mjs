@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
@@ -36,7 +36,7 @@ async function screenshot(name) {
   return pixelStats(bytes);
 }
 
-await page.goto(`${baseUrl}/src/engine/demo.html?quality=high`, { waitUntil: 'networkidle' });
+await page.goto(`${baseUrl}/src/engine/demo.html?quality=high&debugMasks=1`, { waitUntil: 'networkidle' });
 const shapeNames = ['face', 'india', 'lens', 'f1', 'dust'];
 const demo = {};
 for (let i = 0; i < shapeNames.length; i++) {
@@ -55,6 +55,12 @@ for (let i = 0; i < a.data.length; i += 4) {
   if (Math.abs(a.data[i] - b.data[i]) + Math.abs(a.data[i + 1] - b.data[i + 1]) + Math.abs(a.data[i + 2] - b.data[i + 2]) > 8) changedPixels++;
 }
 const animationDifference = changedPixels / (a.width * a.height);
+const maskDebug = await page.evaluate(() => (window).__shapeMaskDebug ?? {});
+let f1MaskWidthRatio = 0;
+for (const [shape, mask] of Object.entries(maskDebug)) {
+  if (mask?.dataUrl) await writeFile(fileURLToPath(new URL(`mask-${shape}.png`, outDir)), Buffer.from(mask.dataUrl.split(',')[1], 'base64'));
+  if (shape === 'f1') f1MaskWidthRatio = mask?.bboxWidthRatio ?? 0;
+}
 
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
 const maxScroll = await page.evaluate(() => Math.max(0, document.documentElement.scrollHeight - innerHeight));
@@ -71,8 +77,9 @@ const results = {
   demo,
   main: mainScreenshots,
   animationDifference,
+  f1MaskWidthRatio,
   errors,
 };
 console.log(JSON.stringify(results, null, 2));
 const metricPass = [...Object.values(demo), ...mainScreenshots].every((m) => m.saturation < 0.12 && m.coverage >= 0.02 && m.coverage <= 0.4);
-if (errors.length || !metricPass || animationDifference < 0.002) process.exitCode = 1;
+if (errors.length || !metricPass || animationDifference < 0.002 || f1MaskWidthRatio < 0.6) process.exitCode = 1;

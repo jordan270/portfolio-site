@@ -86,10 +86,10 @@ void main() {
   float variation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
   float opacity = clamp(variation * uOpacity * uAlphaScale, 0.0, 0.5);
   float rim = mix(1.25, 2.0, vEdge) * mix(1.0, 1.65, vIndiaGlow);
-  float scanlines = 0.975 + 0.025 * sin(vWorldY * 155.0 + uTime * 10.0);
-  float flicker = 0.98 + 0.02 * sin(uTime * 17.0 + vSeed * 41.0);
+  float scanlines = 0.99 + 0.01 * sin(vWorldY * 125.0 + uTime * 8.0);
+  float flicker = 0.99 + 0.01 * sin(uTime * 17.0 + vSeed * 41.0);
   float scanY = mod(uTime * 0.12, 2.4) - 1.2;
-  float scanBand = 1.0 + 0.32 * (1.0 - smoothstep(0.0, 0.026, abs(vWorldY - scanY)));
+  float scanBand = 1.0 + 0.14 * (1.0 - smoothstep(0.0, 0.035, abs(vWorldY - scanY)));
   float hologramAlpha = scanlines * flicker;
   float faceBrightness = mix(1.0, scanBand, vFaceWeight);
   float faceAlpha = mix(1.0, hologramAlpha, vFaceWeight);

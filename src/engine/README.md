@@ -8,20 +8,20 @@
 - `lens`: thin torus, sparse glass, upper-left highlight arc, and a 45° handle.
 - `f1`: samples the alpha silhouette from `/assets/f1.svg` using an offscreen canvas. If that file is absent or invalid, it warns and uses a built-in racing-mark placeholder.
 - `dust`: wide, flat field with low-frequency density variation.
-- `face`: samples `public/shapes/face.bin` for the face when available, with a procedural head, neck, shoulder arc, facial details, and base ring. If the binary is absent it warns and displays the procedural bust. Scanlines, mild flicker, and a slow vertical highlight band are weighted by the face morph value and fade out across adjacent transitions.
+- `face`: samples the photo-derived `public/shapes/face.bin`. If the binary is absent it warns and uses dust. Scanlines, faint flicker, a slow vertical highlight band, and a faint base ring are weighted by the face morph value and fade out across adjacent transitions.
 
 All shape arrays have one point per particle. Their sample order is driven by the geometry's persistent `aSeed` values, so a particle keeps its identity as it moves between distributions.
 
 ## Bake a face
 
-Put a clear, front-facing photo at `private/face.jpg`. That directory is ignored by Git. Install the optional MediaPipe package without changing the project manifest, then run the builder:
+Put a clear, front-facing photo at `private/face.jpg`. That directory is ignored by Git. Install the local background-removal and depth packages without changing the project manifest, then run the builder:
 
 ```sh
-npm install --no-save --package-lock=false @mediapipe/tasks-vision
+npm install --no-save --package-lock=false @imgly/background-removal-node @huggingface/transformers
 node scripts/build-face.mjs
 ```
 
-The script downloads the Face Landmarker model to the OS temporary directory, detects 3D landmarks, triangulates the face oval plus a fading neck extension, and samples 40,000 barycentric points weighted by image darkness and edge strength. It writes packed XYZ `Float32Array` values to `public/shapes/face.bin`. Keep the source photo private; only the generated binary belongs in the site.
+The script downloads model weights on its first run, removes the photo background, estimates depth with Depth Anything V2 Small, and samples 45,000 pixels weighted by luminance contrast and edges. The smoothed depth map shapes the z values, with a fade across the shoulders and lower edge. It writes packed XYZ `Float32Array` values to `public/shapes/face.bin` and a front projection to `debug/face-preview.png`. You can pass a photo path as the first argument for a one-off build. Keep the source photo private; only the generated binary belongs in the site.
 
 ## Quality and appearance
 
