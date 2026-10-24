@@ -2,12 +2,58 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>particle-site</title>
+    <title>Particle Morph Portfolio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Engine stage (fixed fullscreen behind main content) -->
+    <div id="stage" aria-hidden="true"></div>
+
+    <!-- Comet canvas overlay (between stage and text) -->
+    <canvas id="comet-canvas" aria-hidden="true"></canvas>
+
+    <!-- Main scrolling content -->
+    <main id="main">
+      <section id="hero" class="section section--hero" data-shape="sphere">
+        <div class="content-block text-center">
+          <h1 class="reveal-text">Alex Rivera</h1>
+          <p class="reveal-text subtitle">Creative Technologist &amp; System Architect</p>
+        </div>
+      </section>
+
+      <section id="place" class="section section--place" data-shape="map">
+        <div class="content-block text-left">
+          <h2 class="reveal-text">Based in San Francisco</h2>
+          <p class="reveal-text">Building dimensional interfaces and real-time simulations.</p>
+        </div>
+      </section>
+
+      <section id="craft" class="section section--craft" data-shape="helix">
+        <div class="content-block text-right">
+          <h2 class="reveal-text">Algorithmic Sculptures</h2>
+          <p class="reveal-text">Exploring mathematics, procedural forms, and particle physics.</p>
+        </div>
+      </section>
+
+      <section id="more" class="section section--more" data-shape="galaxy">
+        <div class="content-block text-left">
+          <h2 class="reveal-text">And still working on more.</h2>
+          <p class="reveal-text">Inquiries and research collaborations open for late 2026.</p>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <p class="footer-copy">&copy; 2026 Alex Rivera &bull; Minimal particle morph engine</p>
+      </footer>
+    </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

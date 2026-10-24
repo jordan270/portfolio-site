@@ -1,60 +1,65 @@
-import './style.css'
-import heroImg from './assets/hero.png'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import { setupCounter } from './counter.ts'
+import './style.css';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+// Switch between the stub and the real engine using one constant, USE_STUB, at the top of main.ts
+export const USE_STUB = true;
 
-<div class="ticks"></div>
+// @ts-expect-error Real engine is built on another branch until merged
+import createEngine, { createEngine as createEngineNamed } from './engine';
+import { createEngineStub } from './ui/engineStub';
+import { initScroll } from './ui/scroll';
+import { initComet } from './ui/comet';
+import { initReveal } from './ui/reveal';
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+function initApp(): void {
+  const stage = document.getElementById('stage');
+  if (!stage) {
+    console.error('[App] Stage element #stage not found');
+    return;
+  }
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+  // 1. Initialize Engine (stub or real)
+  const factory = USE_STUB ? createEngineStub : (createEngine ?? createEngineNamed);
+  const engine = factory();
+  engine.mount(stage);
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+  // 2. Handle window resize
+  window.addEventListener('resize', () => {
+    engine.resize();
+  });
+
+  // 3. Tab visibility handling (pause/resume energy per SPEC.md)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      engine.setEnergy(0);
+    } else {
+      engine.setEnergy(1);
+    }
+  });
+
+  // 4. Initialize Comet 2D canvas overlay
+  initComet('#comet-canvas');
+
+  // 5. Initialize per-line text reveals
+  initReveal();
+
+  // 6. Initialize Lenis + GSAP ScrollTrigger morph syncing
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) {
+    engine.setEnergy(0);
+  }
+
+  initScroll((from, to, t) => {
+    if (prefersReduced) {
+      // Static shape per SPEC in reduced motion
+      engine.setMorph(from, to, t < 0.5 ? 0 : 1);
+    } else {
+      engine.setMorph(from, to, t);
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
