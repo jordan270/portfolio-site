@@ -15,6 +15,9 @@ Flow: face -> india -> tower -> lens -> flags -> f1 -> dust
 - Only accent: a small green dot (#21e065) beside "Open to internships"
 - One glowing white comet follows the cursor with eased motion and a tapering
   trail (desktop only)
+- Particles are dim by default and brighten near the cursor across every shape;
+  a short cursor trail contributes to the glow, with touch glow fading after
+  release.
 - No boxes, gradients, or UI chrome. Generous empty space.
 - Respect prefers-reduced-motion everywhere.
 - Paragraphs wrap naturally with `text-wrap: pretty`; titles and the hero role
@@ -42,11 +45,15 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 ## Content (use verbatim, do not invent facts)
 
 ### Hero
-- Headline: GARV KAPOOR
+- Name: Garv Kapoor
 - Role: AI/ML engineer in training.
-- Line: I build with Python and real data: live APIs, pre-trained models,
-  and agents that have to work under hard limits.
+- Location line: Noida, India (small and dim)
 - Status: green dot + "Open to internships"
+- Layout: name on the left and right-aligned role on the right in one centered
+  row, both 300 weight and clamp(1rem, 1.5vw, 1.5rem); 4.5vw side padding.
+  Status sits below the name. On mobile, stack name and role at the top left,
+  with status at the bottom left. Keep text in the side margins so it never
+  overlaps the head. Keep the long role paragraph only in meta description.
 
 ### Location
 - Label: LOCATION
@@ -102,9 +109,13 @@ export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | '
 ```
 - `dust`: a sparse, wide, slowly drifting background field; it fills the
   viewport without a figure and dims to 60% opacity on the contact slide.
-- `face`: baked 45,000-point photo-derived cloud split 45% face, 20% hair and
-  35% body. Face detail leads over softened clothing texture; the desktop
-  bust fills about 80% of viewport height, with a soft side and lower fade.
+- `face`: about 70,000 points sampled uniformly by area inside the private
+  portrait mask, with an 8% thin rim band 2–3 pixels inside the silhouette.
+  Optional locally normalized luminance modulation is limited to ±15%. Depth
+  is subtle (about 0.15 figure heights); only the bottom edge fades. Render as
+  a dim, evenly filled frontal bust spanning the viewport height, with small
+  1–1.6 device-pixel particles and no scanline, flicker, scan-band, or base
+  ring effects. At rest idle yaw and mouse parallax stay within ±4 degrees.
 - `india`: official India outline from `assets/india.svg`, scaled to about
   75% of desktop viewport height, with a bright Delhi NCR cluster and subtle
   pulsing ring while india is dominant.
@@ -139,6 +150,7 @@ export interface ParticleEngine {
   setMorph(from: ShapeName, to: ShapeName, t: number); // t 0..1
   setEnergy(value: number): void;
   setQuality(q: 'high' | 'medium' | 'low' | 'auto'): void;
+  setGlow(options: { radius?: number; dim?: number; boost?: number }): void;
   resize(): void;
   dispose(): void;
 }
@@ -148,7 +160,16 @@ The UI uses only this API. The engine does not touch the DOM outside its
 container.
 
 ## Performance
-- Adaptive quality (high 60k, medium 30k, low 12k particles)
+- Adaptive quality (high 60k, medium 5k, low 2.5k particles)
 - DPR capped at 2, pause when the tab is hidden
-- Point size clamped to 1-3 device pixels, with rare sparkle up to 5
+- Uniform default alpha multiplier `uBaseDim` is 0.45. Cursor glow defaults to
+  140 CSS pixels, boosts alpha by up to `1 / dim`, and grows points by up to
+  1.5×. The shader checks the cursor and up to eight exponentially weighted
+  trail positions; CPU updates are smoothed and allocate no per-frame arrays.
+- Face points are about 1–1.6 device pixels; other shapes retain their existing
+  size limits.
 - Reduced motion: static shape, no morph animation
+- Glow remains active under reduced motion, without trail or point-size growth.
+- Touch glow fades over about 600 ms after touchend. Keep medium-tier frame
+  time below 16.7 ms in the headless render check and confirm adaptive quality
+  continues to respond to frame time.

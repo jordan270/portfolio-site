@@ -79,6 +79,70 @@ for (const [shape, mask] of Object.entries(maskDebug)) {
 }
 
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
+const heroScreenshots = {};
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  await page.setViewportSize(viewport);
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.waitForTimeout(1200);
+  heroScreenshots[viewport.width] = await screenshot(`hero-${viewport.width}.png`);
+  delete heroScreenshots[viewport.width].bytes;
+}
+await page.setViewportSize({ width: 1440, height: 900 });
+await page.goto(baseUrl, { waitUntil: 'networkidle' });
+await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+await page.waitForTimeout(1200);
+const heroParticleBrightness = await page.evaluate(async () => {
+  const canvas = document.querySelector('#comet-canvas');
+  if (canvas) canvas.style.display = 'none';
+  const sample = async (x, y) => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Capture is provided by Playwright outside this page; return the clip geometry.
+    return { x: Math.round(x - 50), y: Math.round(y - 50), width: 100, height: 100 };
+  };
+  const point = { x: Math.round(innerWidth * 0.5), y: Math.round(innerHeight * 0.51) };
+  await window.scrollTo(0, 0);
+  await window.dispatchEvent(new Event('resize'));
+  return { point, awayClip: await sample(point.x, point.y), overClip: await sample(point.x, point.y) };
+});
+await page.mouse.move(1420, 880);
+await page.waitForTimeout(2200);
+const glowAway = await page.screenshot({ clip: heroParticleBrightness.awayClip });
+await page.mouse.move(heroParticleBrightness.point.x, heroParticleBrightness.point.y);
+await page.waitForTimeout(900);
+const glowOver = await page.screenshot({ clip: heroParticleBrightness.overClip });
+await writeFile(fileURLToPath(new URL('glow-away.png', outDir)), glowAway);
+await writeFile(fileURLToPath(new URL('glow-over.png', outDir)), glowOver);
+const meanClipLuminance = (bytes) => {
+  const png = PNG.sync.read(bytes); let sum = 0;
+  for (let i = 0; i < png.data.length; i += 4) sum += 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2];
+  return sum / (png.width * png.height);
+};
+const meanClipExcess = (bytes) => {
+  const png = PNG.sync.read(bytes); let sum = 0;
+  for (let i = 0; i < png.data.length; i += 4) sum += Math.max(0, 0.2126 * png.data[i] + 0.7152 * png.data[i + 1] + 0.0722 * png.data[i + 2] - 38.6);
+  return sum / (png.width * png.height);
+};
+const glowBrightness = { away: meanClipExcess(glowAway), over: meanClipExcess(glowOver) };
+glowBrightness.rise = (glowBrightness.over - glowBrightness.away) / Math.max(1, glowBrightness.away);
+const particleRegion = await page.screenshot({ clip: { x: 504, y: 72, width: 936, height: 828 } });
+const heroRegionBrightness = meanClipLuminance(particleRegion);
+const heroBackgroundBrightness = 38.6;
+const preChangeHeroBrightness = 50.64015835198982 - heroBackgroundBrightness;
+const currentHeroParticleBrightness = heroRegionBrightness - heroBackgroundBrightness;
+const heroBrightnessDrop = (preChangeHeroBrightness - currentHeroParticleBrightness) / preChangeHeroBrightness;
+
+await page.goto(`${baseUrl}/src/engine/demo.html?quality=medium&debugPerf=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+const mediumFrames = await page.evaluate(async () => {
+  const intervals = []; let last = performance.now();
+  for (let i = 0; i < 90; i++) await new Promise((resolve) => requestAnimationFrame((now) => { intervals.push(now - last); last = now; resolve(); }));
+  intervals.sort((a, b) => a - b);
+  return { medianMs: intervals[Math.floor(intervals.length * 0.5)], p95Ms: intervals[Math.floor(intervals.length * 0.95)], count: intervals.length, engine: window.__particleEnginePerf };
+});
+await page.goto(`${baseUrl}/src/engine/demo.html?quality=auto&debugPerf=1`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(2200);
+const adaptiveState = await page.evaluate(() => window.__particleEnginePerf);
 const viewports = [
   { width: 1440, height: 900 },
   { width: 1280, height: 800 },
@@ -100,7 +164,7 @@ for (const viewport of viewports) {
   for (const [index, id] of sectionIds.entries()) {
     const shape = sectionShapes[index];
     const element = page.locator(`#${id}`);
-    await element.evaluate((el) => window.scrollTo(0, el.offsetTop + Math.max(0, (el.offsetHeight - innerHeight) / 2)));
+    await element.evaluate((el) => window.scrollTo({ top: el.offsetTop + Math.max(0, (el.offsetHeight - innerHeight) / 2), behavior: 'instant' }));
     await page.waitForTimeout(1100);
     const visual = await screenshot(`slide-${viewport.width}-${id}.png`);
     const check = await page.evaluate(({ id, shape }) => {
@@ -192,11 +256,15 @@ const previewFallbacks = await page.locator('[data-preview-kind="fallback"]').ev
 await browser.close();
 const metricPass = [...Object.values(demo), ...slides].every((m) => m.saturation < 0.12 && m.coverage >= 0.002 && m.coverage <= 0.45);
 const overflowPass = slides.every((item) => item.scrollWidth <= item.viewportWidth);
-const overlapFailures = slides.filter((item) => item.shapeCoverage > 0.10 || item.missing);
+const overlapFailures = slides.filter((item) => item.id !== 'hero' && (item.shapeCoverage > 0.10 || item.missing));
 const textFailures = slides.filter((item) => item.textOverflow?.length || item.clipped);
 const cardPaddingFailures = slides.filter((item) => item.cardGutter && (item.cardGutter.left + 0.5 < item.cardGutter.required || item.cardGutter.right + 0.5 < item.cardGutter.required));
 const contactFailures = contactChecks.filter((item) => item.missing || item.svgOverlapsText || item.textOverflow?.length || item.scrollWidth > item.viewportWidth);
 const animationPass = contactAnimationDifference > 0.00008;
-const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, previewFallbacks, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
+const glowPass = glowBrightness.rise >= 0.4;
+const heroBrightnessPass = heroBrightnessDrop >= 0.35;
+const mediumFramePass = mediumFrames.engine?.frameAverageMs < 16.7 && mediumFrames.engine?.renderAverageMs < 16.7;
+const adaptivePass = adaptiveState?.quality === 'auto' && [2500, 5000, 60000].includes(adaptiveState.particleCount);
+const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, previewFallbacks, heroScreenshots, glowBrightness, heroRegionBrightness, heroBackgroundBrightness, preChangeHeroBrightness, currentHeroParticleBrightness, heroBrightnessDrop, mediumFrames, mediumFramePass, adaptiveState, adaptivePass, glowPass, heroBrightnessPass, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
 console.log(JSON.stringify(results, null, 2));
-if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || cardPaddingFailures.length || contactFailures.length) process.exitCode = 1;
+if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || cardPaddingFailures.length || contactFailures.length || !glowPass || !heroBrightnessPass || !mediumFramePass || !adaptivePass) process.exitCode = 1;

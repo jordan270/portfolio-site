@@ -10,6 +10,7 @@ export interface ParticleEngine {
   setEnergy(value: number): void;
   /** Adaptive particle density quality */
   setQuality(quality: 'high' | 'medium' | 'low' | 'auto'): void;
+  setGlow(options: { radius?: number; dim?: number; boost?: number }): void;
   resize(): void;
   dispose(): void;
 }
@@ -223,6 +224,10 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
 
     setQuality(quality: 'high' | 'medium' | 'low' | 'auto') {
       console.log(`[engineStub] setQuality: ${quality}`);
+    },
+
+    setGlow(options) {
+      console.log(`[engineStub] setGlow: ${JSON.stringify(options)}`);
     },
 
     resize,

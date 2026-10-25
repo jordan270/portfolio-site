@@ -24,19 +24,10 @@ export function generate(count: number, seeds?: Float32Array): Float32Array {
   const points = new Float32Array(Math.max(0, count) * 3);
   for (let i = 0; i < count; i++) {
     const seed = seeds?.[i] ?? (i + 0.5) / Math.max(1, count);
-    if (seed > 0.995) {
-      // The faint support ring is part of the face-only cloud and fades with its morph weight.
-      const t = (seed * 31.7) % 1 * Math.PI * 2;
-      const radius = 1.06 + ((seed * 19.3) % 1) * 0.036;
-      points[i * 3] = Math.cos(t) * radius;
-      points[i * 3 + 1] = -1.04 + ((seed * 11.1) % 1 - 0.5) * 0.016;
-      points[i * 3 + 2] = Math.sin(t) * radius * 0.14;
-      continue;
-    }
-    const index = Math.min(vertices - 1, Math.floor(seed / 0.985 * vertices));
-    points[i * 3] = bakedFace[index * 3] * 2.8;
-    points[i * 3 + 1] = bakedFace[index * 3 + 1] * 2.8;
-    points[i * 3 + 2] = bakedFace[index * 3 + 2] * 2.8;
+    const index = Math.min(vertices - 1, Math.floor(seed * vertices));
+    points[i * 3] = bakedFace[index * 3] * 3.2;
+    points[i * 3 + 1] = bakedFace[index * 3 + 1] * 3.2;
+    points[i * 3 + 2] = bakedFace[index * 3 + 2] * 3.2;
   }
   return points;
 }

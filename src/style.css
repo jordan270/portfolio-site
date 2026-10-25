@@ -111,10 +111,10 @@ html.lenis, html.lenis body {
 }
 
 .section--hero {
-  min-height: 120vh;
-  justify-content: flex-start;
+  min-height: 100vh;
+  justify-content: center;
   text-align: left;
-  padding-left: 5vw;
+  padding: 0;
 }
 
 .section--location,
@@ -223,9 +223,32 @@ html.lenis, html.lenis body {
 }
 
 .section--hero .content-block {
-  width: min(32rem, 46vw);
-  max-width: min(32rem, 46vw);
+  width: 100%;
+  max-width: none;
+  overflow: visible;
 }
+
+.hero-copy {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-inline: 4.5vw;
+}
+.hero-name-group, .hero-role-group { position: relative; z-index: 2; }
+.hero-role-group { max-width: 30vw; margin-left: auto; text-align: right; }
+.hero-copy .status-indicator { margin-top: .4rem; }
+.section--hero h1.hero-name,
+.section--hero .hero-role {
+  color: #fff;
+  font-size: clamp(1rem, 1.5vw, 1.5rem);
+  font-weight: 300;
+  line-height: 1.25;
+  letter-spacing: var(--letter-spacing);
+  margin: 0;
+}
+.hero-location { margin-top: .35rem; color: var(--text-dim); font-size: .78rem; font-weight: 300; }
 
 .section--contact .content-block {
   margin: 0 auto;
@@ -542,14 +565,25 @@ a:focus-visible {
   }
 
   .section--hero {
-    min-height: 120vh;
-    align-items: center;
+    min-height: 100vh;
+    align-items: stretch;
   }
 
   .section--hero .content-block {
     width: 100%;
     max-width: 100%;
   }
+  .section--hero .hero-copy {
+    height: 100vh;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: .6rem;
+    padding: 7vh 4.5vw 6vh;
+  }
+  .section--hero .hero-role-group { max-width: none; margin-left: 0; text-align: left; }
+  .section--hero .hero-name-group { position: static; }
+  .section--hero .hero-copy .status-indicator { position: absolute; left: 4.5vw; bottom: 6vh; margin: 0; }
 
   .section--location,
   .section--autopilot,

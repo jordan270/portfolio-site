@@ -6,6 +6,10 @@ const slider = document.querySelector<HTMLInputElement>('#shape-step');
 const label = document.querySelector<HTMLElement>('#shape-name');
 const sizeSlider = document.querySelector<HTMLInputElement>('#size-scale');
 const alphaSlider = document.querySelector<HTMLInputElement>('#alpha-scale');
+const glowRadiusSlider = document.querySelector<HTMLInputElement>('#glow-radius');
+const glowDimSlider = document.querySelector<HTMLInputElement>('#glow-dim');
+const glowRadiusValue = document.querySelector<HTMLOutputElement>('#glow-radius-value');
+const glowDimValue = document.querySelector<HTMLOutputElement>('#glow-dim-value');
 const sizeValue = document.querySelector<HTMLOutputElement>('#size-value');
 const alphaValue = document.querySelector<HTMLOutputElement>('#alpha-value');
 if (!root || !slider || !label) throw new Error('Particle demo markup is incomplete');
@@ -29,7 +33,16 @@ function updateTuning() {
   sizeValue!.value = size.toFixed(2);
   alphaValue!.value = alpha.toFixed(2);
 }
+function updateGlow() {
+  const radius = Number(glowRadiusSlider?.value ?? 140), dim = Number(glowDimSlider?.value ?? 0.45);
+  engine.setGlow({ radius, dim });
+  if (glowRadiusValue) glowRadiusValue.value = String(radius);
+  if (glowDimValue) glowDimValue.value = dim.toFixed(2);
+}
 sizeSlider?.addEventListener('input', updateTuning);
 alphaSlider?.addEventListener('input', updateTuning);
+glowRadiusSlider?.addEventListener('input', updateGlow);
+glowDimSlider?.addEventListener('input', updateGlow);
 updateTuning();
+updateGlow();
 window.addEventListener('pagehide', () => engine.dispose(), { once: true });
