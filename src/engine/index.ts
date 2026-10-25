@@ -158,9 +158,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     return value;
   };
   const onPointer = (event: PointerEvent) => {
-    pointerX = event.clientX / Math.max(1, window.innerWidth) * 2 - 1;
-    pointerY = event.clientY / Math.max(1, window.innerHeight) * 2 - 1;
+    pointerX = THREE.MathUtils.clamp((event.clientX / Math.max(1, window.innerWidth) * 2 - 1), -1, 1);
+    pointerY = THREE.MathUtils.clamp((event.clientY / Math.max(1, window.innerHeight) * 2 - 1), -1, 1);
   };
+  const onPointerLeave = () => { pointerX = 0; pointerY = 0; };
   const onVisibility = () => {
     if (document.hidden) cancelAnimationFrame(raf);
     else if (!disposed && renderer) { clock.getDelta(); raf = requestAnimationFrame(render); }
@@ -207,10 +208,11 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     smoothX += (pointerX - smoothX) * 0.035;
     smoothY += (pointerY - smoothY) * 0.035;
     material.uniforms.uParallax.value = smoothX;
-    if (points && !reducedMotion) {
-      points.rotation.x += (smoothY * 0.035 - points.rotation.x) * 0.025;
-    } else if (points && reducedMotion) {
-      points.rotation.y = 0;
+    if (points) {
+      const idleYaw = reducedMotion ? 0 : Math.sin(elapsed * 0.24) * THREE.MathUtils.degToRad(6);
+      const mouseYaw = reducedMotion ? 0 : smoothX * THREE.MathUtils.degToRad(5);
+      points.rotation.x += (0 - points.rotation.x) * 0.025;
+      points.rotation.y += (idleYaw + mouseYaw - points.rotation.y) * 0.025;
     }
     renderer.render(scene, camera);
   };
@@ -293,6 +295,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       observer = new ResizeObserver(() => this.resize());
       observer.observe(target);
       window.addEventListener('pointermove', onPointer, { passive: true });
+      window.addEventListener('pointerleave', onPointerLeave, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
       void Promise.all([loadFaceData(), loadIndiaData(), loadF1Source()]).then(() => {
         if (disposed || !geometry) return;
@@ -345,6 +348,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       cancelAnimationFrame(raf);
       observer?.disconnect();
       window.removeEventListener('pointermove', onPointer);
+      window.removeEventListener('pointerleave', onPointerLeave);
       document.removeEventListener('visibilitychange', onVisibility);
       geometry?.dispose(); material?.dispose(); renderer?.dispose();
       if (container && renderer?.domElement.parentElement === container) container.removeChild(renderer.domElement);

@@ -188,23 +188,40 @@ const faceRadiusX = headWidth * 0.39, faceRadiusY = (headMaxY - headMinY) * 0.35
 const faceBottom = faceCenterY + faceRadiusY;
 
 // CLAHE-style tile equalization makes edges on softly lit skin measurable.
-const equalized = clahe(sourceLum, width, height);
-const blurred = gaussianBlur(sourceLum, width, height, 6);
+const illumination = gaussianBlur(sourceLum, width, height, Math.max(8, Math.round(Math.min(width, height) * 0.08)));
+const normalizedLum = new Float32Array(sourceLum.length);
+for (let i = 0; i < sourceLum.length; i++) normalizedLum[i] = Math.max(0, Math.min(1, sourceLum[i] / Math.max(0.035, illumination[i])));
+const equalized = clahe(normalizedLum, width, height);
+const localNorm = gaussianBlur(equalized, width, height, Math.max(2, Math.round(Math.min(width, height) * 0.012)));
+const locallyNormalized = new Float32Array(equalized.length);
+for (let i = 0; i < equalized.length; i++) locallyNormalized[i] = Math.max(0, Math.min(1, 0.5 + (equalized[i] - localNorm[i]) * 2.5));
+const blurred = gaussianBlur(normalizedLum, width, height, 6);
 const facePixels = [], hairPixels = [], bodyPixels = [];
 for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
   const index = y * width + x;
   if (alpha[index] <= 25) continue;
   const inFace = ((x - centerX) / faceRadiusX) ** 2 + ((y - faceCenterY) / faceRadiusY) ** 2 <= 1 && y <= faceBottom;
-  const left = sourceLum[y * width + Math.max(0, x - 1)], right = sourceLum[y * width + Math.min(width - 1, x + 1)];
-  const up = sourceLum[Math.max(0, y - 1) * width + x], down = sourceLum[Math.min(height - 1, y + 1) * width + x];
-  const eqEdge = Math.min(1, Math.hypot(equalized[y * width + Math.min(width - 1, x + 1)] - equalized[y * width + Math.max(0, x - 1)], equalized[Math.min(height - 1, y + 1) * width + x] - equalized[Math.max(0, y - 1) * width + x]) * 2.2);
+  const eqEdge = Math.min(1, Math.hypot(locallyNormalized[y * width + Math.min(width - 1, x + 1)] - locallyNormalized[y * width + Math.max(0, x - 1)], locallyNormalized[Math.min(height - 1, y + 1) * width + x] - locallyNormalized[Math.max(0, y - 1) * width + x]) * 2.2);
   const smoothEdge = Math.min(1, Math.hypot(blurred[y * width + Math.min(width - 1, x + 1)] - blurred[y * width + Math.max(0, x - 1)], blurred[Math.min(height - 1, y + 1) * width + x] - blurred[Math.max(0, y - 1) * width + x]) * 3.4);
   const maskEdge = Math.min(1, Math.abs(alpha[index] - Math.min(alpha[y * width + Math.max(0, x - 1)], alpha[y * width + Math.min(width - 1, x + 1)], alpha[Math.max(0, y - 1) * width + x], alpha[Math.min(height - 1, y + 1) * width + x])) / 150);
   const vertical = (y - minY) / personHeight;
   const side = Math.abs((x - centerX) / Math.max(1, (maxX - minX) / 2));
   const fade = 1 - smoothstep(0.72, 1, Math.max(vertical, side));
   const aa = alpha[index] / 255;
-  if (inFace) facePixels.push({ x, y, index, weight: (0.65 + eqEdge * 3.5) * aa });
+  if (inFace) {
+    const nx = (x - centerX) / faceRadiusX, ny = (y - faceCenterY) / faceRadiusY;
+    // Landmark-aligned feature bands: eye/glasses frame, brows, nostrils, lips and jaw.
+    const eye = Math.exp(-((Math.abs(nx) - 0.34) ** 2 / 0.018 + (ny + 0.12) ** 2 / 0.004));
+    const brow = Math.exp(-((Math.abs(nx) - 0.34) ** 2 / 0.035 + (ny + 0.25) ** 2 / 0.006));
+    // Frame rims and bridge keep glasses legible even in a low-detail source portrait.
+    const frame = Math.exp(-((Math.abs(nx) - 0.34) ** 2 / 0.008 + (ny + 0.12) ** 2 / 0.035));
+    const bridge = Math.exp(-(nx ** 2 / 0.006 + (ny + 0.12) ** 2 / 0.018));
+    const nostril = Math.exp(-(nx ** 2 / 0.012 + (ny - 0.12) ** 2 / 0.004));
+    const lips = Math.exp(-(nx ** 2 / 0.035 + (ny - 0.34) ** 2 / 0.006));
+    const jaw = Math.exp(-((Math.abs(nx) - 0.65) ** 2 / 0.018 + (ny - 0.56) ** 2 / 0.01));
+    const boost = 1 + 16 * eye + 5 * brow + 18 * frame + 12 * bridge + 12 * nostril + 12 * lips + 5 * jaw + eqEdge * 2.5;
+    facePixels.push({ x, y, index, weight: boost * aa, uniformWeight: aa });
+  }
   else if (y < faceBottom + personHeight * 0.025) hairPixels.push({ x, y, index, weight: (0.18 + eqEdge * 1.6 + maskEdge * 4) * aa });
   else if (y > faceBottom) bodyPixels.push({ x, y, index, weight: Math.min(0.26, (0.03 + smoothEdge * 1.3 + maskEdge * 2.2) * aa) * fade });
 }
@@ -216,6 +233,8 @@ function makeSampler(pixels, count) {
   return { pixels, cumulative, total, count };
 }
 const samplers = [makeSampler(facePixels, 20_250), makeSampler(hairPixels, 9_000), makeSampler(bodyPixels, 15_750)];
+const uniformFaceCumulative = cumulativeWeights(facePixels.map((pixel) => pixel.uniformWeight));
+const faceLandmarks = makeFaceLandmarkStrokes(faceCenterY, faceRadiusX, faceRadiusY, centerX);
 
 let randomState = 0x4f1bbcdc;
 const random = () => {
@@ -225,11 +244,29 @@ const random = () => {
 const pointCount = 45_000;
 const output = new Float32Array(pointCount * 3);
 let out = 0;
-for (const sampler of samplers) for (let n = 0; n < sampler.count; n++, out++) {
-  const target = random() * sampler.total;
+for (const [samplerIndex, sampler] of samplers.entries()) for (let n = 0; n < sampler.count; n++, out++) {
+  const uniformCount = Math.round(sampler.count * 0.60);
+  const landmarkCount = Math.round(sampler.count * 0.18);
+  const isUniformFaceSample = samplerIndex === 0 && n < uniformCount;
+  const isLandmarkSample = samplerIndex === 0 && n >= uniformCount && n < uniformCount + landmarkCount;
+  const population = isUniformFaceSample ? facePixels : sampler.pixels;
+  const cumulative = isUniformFaceSample ? uniformFaceCumulative : sampler.cumulative;
+  if (isLandmarkSample) {
+    const landmark = faceLandmarks[(n - uniformCount) % faceLandmarks.length];
+    const x = landmark.x + (random() - 0.5) * 0.0015 * personHeight;
+    const y = landmark.y + (random() - 0.5) * 0.0015 * personHeight;
+    const index = Math.max(0, Math.min(width * height - 1, Math.round(y) * width + Math.round(x)));
+    output[out * 3] = (x - centerX) / personHeight;
+    output[out * 3 + 1] = 0.5 - (y - minY) / personHeight;
+    output[out * 3 + 2] = (smoothDepth[index] - 0.5) * 0.25 + 0.015;
+    continue;
+  }
+  const total = isUniformFaceSample ? cumulative.at(-1) : sampler.total;
+  const target = random() * total;
   let low = 0, high = sampler.cumulative.length - 1;
-  while (low < high) { const mid = (low + high) >> 1; if (sampler.cumulative[mid] < target) low = mid + 1; else high = mid; }
-  const pixel = sampler.pixels[low];
+  high = cumulative.length - 1;
+  while (low < high) { const mid = (low + high) >> 1; if (cumulative[mid] < target) low = mid + 1; else high = mid; }
+  const pixel = population[low];
   const x = pixel.x + random() - 0.5, y = pixel.y + random() - 0.5;
   let z = smoothDepth[pixel.index] - 0.5;
   if (sampler === samplers[0]) {
@@ -251,7 +288,7 @@ for (let i = 0; i < output.length; i += 3) {
   const px = Math.round(512 + output[i] * 850);
   const py = Math.round(512 - output[i + 1] * 850);
   if (px < 1 || px >= 1023 || py < 1 || py >= 1023) continue;
-  const value = Math.round(145 + Math.min(0.11, Math.abs(output[i + 2])) * 900);
+  const value = 190;
   for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
     if (ox * ox + oy * oy > 1) continue;
     const p = ((py + oy) * preview.width + px + ox) * 4;
@@ -265,12 +302,50 @@ await mkdir(path.dirname(outPath), { recursive: true });
 await mkdir(path.dirname(previewPath), { recursive: true });
 await writeFile(outPath, Buffer.from(output.buffer));
 await writeFile(previewPath, PNG.sync.write(preview));
+printFaceDensity(output, faceCenterY, faceRadiusX, faceRadiusY, centerX, facePixels.length);
 console.log(`Wrote ${pointCount.toLocaleString()} photo-derived head-and-shoulders points to public/shapes/face.bin`);
 console.log(`Wrote front projection preview to debug/face-preview.png`);
 
 function smoothstep(edge0, edge1, value) {
   const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+function cumulativeWeights(weights) { let total = 0; return weights.map((weight) => (total += weight)); }
+
+function makeFaceLandmarkStrokes(cy, rx, ry, cx) {
+  const strokes = [];
+  const line = (fn, count) => { for (let i = 0; i < count; i++) { const t = i / Math.max(1, count - 1); const [nx, ny] = fn(t); strokes.push({ x: cx + nx * rx, y: cy + ny * ry }); } };
+  // Stylised landmark scaffold, aligned to a frontal face oval when the photo has no detectable facial detail.
+  for (const side of [-1, 1]) {
+    line((t) => { const a = -Math.PI * 0.12 + t * Math.PI * 1.12; return [side * 0.34 + Math.cos(a) * 0.25, -0.12 + Math.sin(a) * 0.15]; }, 360);
+    line((t) => [side * (0.34 - 0.15 * t), -0.12 + Math.sin(t * Math.PI) * 0.035], 220);
+    line((t) => [side * (0.18 + 0.34 * t), -0.25 - Math.sin(t * Math.PI) * 0.025], 180);
+  }
+  line((t) => [-0.34 + t * 0.68, -0.12], 180);
+  line((t) => [Math.sin((t - 0.5) * Math.PI) * 0.075, -0.08 + t * 0.40], 380);
+  line((t) => [-0.12 + t * 0.24, 0.12 + Math.sin(t * Math.PI) * 0.025], 180);
+  line((t) => [-0.23 + t * 0.46, 0.34 + Math.sin(t * Math.PI) * 0.035], 260);
+  line((t) => { const a = Math.PI * (0.08 + t * 0.84); return [Math.cos(a) * 0.67, 0.47 + Math.sin(a) * 0.16]; }, 300);
+  return strokes;
+}
+
+function printFaceDensity(points, cy, rx, ry, cx, faceAreaPixels) {
+  let face = 0, cheek = 0, eyes = 0, top = 0;
+  for (let i = 0; i < points.length; i += 3) {
+    const x = points[i] * personHeight + centerX, y = minY + (0.5 - points[i + 1]) * personHeight;
+    const nx = (x - cx) / rx, ny = (y - cy) / ry;
+    if (nx * nx + ny * ny > 1) continue;
+    face++;
+    if (Math.abs(nx) > 0.25 && Math.abs(nx) < 0.65 && ny > 0.02 && ny < 0.38) cheek++;
+    if (Math.abs(nx) < 0.72 && ny > -0.28 && ny < -0.02) eyes++;
+    if (ny < -0.62) top++;
+  }
+  const average = face / faceAreaPixels;
+  const cheekDensity = cheek / Math.max(1, faceAreaPixels * 0.16);
+  const eyeDensity = eyes / Math.max(1, faceAreaPixels * 0.19);
+  const topDensity = top / Math.max(1, faceAreaPixels * 0.12);
+  console.log(`Projected face density: average=${average.toFixed(4)} points/pixel, cheek=${(cheekDensity / average).toFixed(2)}x average, eye/glasses=${(eyeDensity / average).toFixed(2)}x average (${(eyeDensity / Math.max(1e-9, cheekDensity)).toFixed(2)}x cheek), top-of-head=${(topDensity / average).toFixed(2)}x average`);
 }
 
 async function findPhoto(argument) {
