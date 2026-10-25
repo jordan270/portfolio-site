@@ -7,12 +7,12 @@ type ProjectCardData = {
   description: string;
   tags: string;
   fact?: string;
-  href: string;
-  linkText: string;
+  href?: string;
+  linkText?: string;
 };
 
 const projects: ProjectCardData[] = [
-  { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', fact: 'Top 5 overall', href: 'https://github.com/jordan270', linkText: 'View on GitHub' },
+  { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', fact: 'Top 5 overall' },
   { section: 'lens', slug: 'rhetoriclens', title: 'RhetoricLens', year: '2026', label: 'JAI 2026 Hackathon', description: 'A team-built web app that analyses arguments for logical fallacies. I worked on UI consistency and low-end device performance.', tags: 'Python, FastAPI, HTML/CSS/JS', href: 'https://github.com/Adhyan0112/Rhetoric-lenss', linkText: 'View on GitHub' },
   { section: 'sentiment', slug: 'f1-sentiment', title: 'F1 Race Sentiment Tracker', year: '2026', label: 'Formula 1', description: 'Scores fan reactions to F1 races with a pre-trained HuggingFace model, and documents where it fails on sarcasm.', tags: 'Python, HuggingFace, uv', href: 'https://github.com/jordan270/projects', linkText: 'Sentiment Tracker' },
   { section: 'analyzer', slug: 'f1-analyzer', title: 'F1 Race Analyzer', year: '2026', label: 'Harvard CS50P final project', description: 'Pulls live race data from the Jolpica API, with fastest laps and pit-stop strategies, covered by pytest.', tags: 'Python, REST APIs, pytest', href: 'https://github.com/jordan270', linkText: 'Race Analyzer' },
@@ -40,12 +40,6 @@ export function initProjectCards(): void {
     const article = document.createElement('article');
     article.className = 'project-card reveal-block';
     article.dataset.project = project.slug;
-    const previewLink = document.createElement('a');
-    previewLink.className = 'project-preview-link';
-    previewLink.href = project.href;
-    previewLink.target = '_blank';
-    previewLink.rel = 'noopener noreferrer';
-    previewLink.setAttribute('aria-label', `Open ${project.title} on GitHub`);
     const media = document.createElement('div');
     media.className = 'project-media';
     const asset = extensionOrder.map((extension) => projectFiles[`/assets/projects/${project.slug}.${extension}`]).find(Boolean);
@@ -73,7 +67,22 @@ export function initProjectCards(): void {
       media.append(fallback);
     }
 
-    previewLink.append(media);
+    let preview: HTMLElement;
+    if (project.href) {
+      const previewLink = document.createElement('a');
+      previewLink.className = 'project-preview-link';
+      previewLink.href = project.href;
+      previewLink.target = '_blank';
+      previewLink.rel = 'noopener noreferrer';
+      previewLink.setAttribute('aria-label', `Open ${project.title} on GitHub`);
+      previewLink.append(media);
+      preview = previewLink;
+    } else {
+      preview = document.createElement('div');
+      preview.className = 'project-preview-static';
+      preview.setAttribute('aria-hidden', 'true');
+      preview.append(media);
+    }
     const titleRow = document.createElement('div'); titleRow.className = 'project-title-row';
     const title = document.createElement('h2'); title.textContent = project.title;
     const year = document.createElement('span'); year.className = 'project-year'; year.textContent = project.year;
@@ -82,9 +91,14 @@ export function initProjectCards(): void {
     const label = document.createElement('p'); label.className = 'project-label'; label.textContent = project.label;
     const tags = document.createElement('p'); tags.className = 'project-tags'; tags.textContent = project.tags;
     const links = document.createElement('div'); links.className = 'project-links';
-    const link = document.createElement('a'); link.href = project.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.className = 'quiet-link'; link.textContent = project.linkText;
-    links.append(link);
-    article.append(previewLink, titleRow, description, label, tags, links);
+    if (project.href && project.linkText) {
+      const link = document.createElement('a'); link.href = project.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.className = 'quiet-link'; link.textContent = project.linkText;
+      links.append(link);
+    } else {
+      const unavailable = document.createElement('span'); unavailable.className = 'project-no-link'; unavailable.textContent = 'Code not public';
+      links.append(unavailable);
+    }
+    article.append(preview, titleRow, description, label, tags, links);
     content.replaceChildren(article);
   }
 

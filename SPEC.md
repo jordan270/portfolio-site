@@ -59,7 +59,8 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - Text: A rule-based tower-defence agent in pure Python, scoring 357.78 across
   four public test cases.
 - Tags: Python
-- Link: "View on GitHub" -> https://github.com/jordan270
+- Preview: static and non-focusable; not wrapped in a link.
+- Link row: "Code not public" (plain dim text; no project link).
 
 ### Lens
 - Label: JAI 2026 Hackathon
