@@ -6,20 +6,21 @@ type ProjectCardData = {
   label: string;
   description: string;
   tags: string;
+  concept: boolean;
   fact?: string;
   href?: string;
   linkText?: string;
 };
 
 const projects: ProjectCardData[] = [
-  { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', fact: 'Top 5 overall' },
-  { section: 'lens', slug: 'rhetoriclens', title: 'RhetoricLens', year: '2026', label: 'JAI 2026 Hackathon', description: 'A team-built web app that analyses arguments for logical fallacies. I worked on UI consistency and low-end device performance.', tags: 'Python, FastAPI, HTML/CSS/JS', href: 'https://github.com/Adhyan0112/Rhetoric-lenss', linkText: 'View on GitHub' },
-  { section: 'sentiment', slug: 'f1-sentiment', title: 'F1 Race Sentiment Tracker', year: '2026', label: 'Formula 1', description: 'Scores fan reactions to F1 races with a pre-trained HuggingFace model, and documents where it fails on sarcasm.', tags: 'Python, HuggingFace, uv', href: 'https://github.com/jordan270/projects', linkText: 'Sentiment Tracker' },
-  { section: 'analyzer', slug: 'f1-analyzer', title: 'F1 Race Analyzer', year: '2026', label: 'Harvard CS50P final project', description: 'Pulls live race data from the Jolpica API, with fastest laps and pit-stop strategies, covered by pytest.', tags: 'Python, REST APIs, pytest', href: 'https://github.com/jordan270', linkText: 'Race Analyzer' },
+  { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', concept: false, fact: 'Top 5 overall' },
+  { section: 'lens', slug: 'rhetoriclens', title: 'RhetoricLens', year: '2026', label: 'JAI 2026 Hackathon', description: 'A team-built web app that analyses arguments for logical fallacies. I worked on UI consistency and low-end device performance.', tags: 'Python, FastAPI, HTML/CSS/JS', concept: false, href: 'https://github.com/Adhyan0112/Rhetoric-lenss', linkText: 'View on GitHub' },
+  { section: 'sentiment', slug: 'f1-sentiment', title: 'F1 Race Sentiment Tracker', year: '2026', label: 'Formula 1', description: 'Scores fan reactions to F1 races with a pre-trained HuggingFace model, and documents where it fails on sarcasm.', tags: 'Python, HuggingFace, uv', concept: true, href: 'https://github.com/jordan270/projects', linkText: 'Sentiment Tracker' },
+  { section: 'analyzer', slug: 'f1-analyzer', title: 'F1 Race Analyzer', year: '2026', label: 'Harvard CS50P final project', description: 'Pulls live race data from the Jolpica API, with fastest laps and pit-stop strategies, covered by pytest.', tags: 'Python, REST APIs, pytest', concept: true, href: 'https://github.com/jordan270', linkText: 'Race Analyzer' },
 ];
 
-const projectFiles = import.meta.glob('/assets/projects/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
-const extensionOrder = ['mp4', 'webm', 'png', 'jpg', 'jpeg', 'webp'];
+const projectFiles = import.meta.glob('/assets/projects/*.{mp4,webm,png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const extensionOrder = ['webp', 'mp4', 'webm', 'png', 'jpg', 'jpeg'];
 
 export function initProjectCards(): void {
   const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -42,6 +43,7 @@ export function initProjectCards(): void {
     article.dataset.project = project.slug;
     const media = document.createElement('div');
     media.className = 'project-media';
+    media.dataset.projectMedia = project.slug;
     const asset = extensionOrder.map((extension) => projectFiles[`/assets/projects/${project.slug}.${extension}`]).find(Boolean);
 
     if (asset && /\.(mp4|webm)$/i.test(asset)) {
@@ -65,6 +67,12 @@ export function initProjectCards(): void {
       fallback.append(title, tags);
       if (project.fact) { const fact = document.createElement('span'); fact.className = 'preview-fact'; fact.textContent = project.fact; fallback.append(fact); }
       media.append(fallback);
+    }
+    if (project.concept) {
+      const badge = document.createElement('span');
+      badge.className = 'concept-visual-tag';
+      badge.textContent = 'CONCEPT VISUAL';
+      media.append(badge);
     }
 
     let preview: HTMLElement;

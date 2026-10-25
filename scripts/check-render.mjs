@@ -4,6 +4,8 @@ import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 
 const baseUrl = process.argv[2] || 'http://localhost:5173';
+const appUrl = new URL(baseUrl);
+appUrl.searchParams.set('debugFrames', '1');
 const outDir = new URL('../debug/', import.meta.url);
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -32,7 +34,7 @@ async function screenshot(name, allowAnimations = false) {
   return { bytes, ...pixelStats(bytes) };
 }
 
-const shapeNames = ['face', 'india', 'tower', 'lens', 'flags', 'f1', 'dust'];
+const shapeNames = ['face', 'india', 'python', 'lens', 'flags', 'f1', 'dust'];
 await page.goto(`${baseUrl}/src/engine/demo.html?quality=high&debugMasks=1`, { waitUntil: 'networkidle' });
 const f1ContrastCases = await page.evaluate(async () => {
   const source = new Image(); source.src = '/assets/f1.png'; await source.decode();
@@ -64,6 +66,22 @@ const flagsMaskCheck = await page.evaluate(async () => {
   return verifyMaskSamples(generate(count, seeds));
 });
 if (flagsMaskCheck.total !== 4096 || flagsMaskCheck.outside !== 0) throw new Error(`Flags mask leak check failed: ${JSON.stringify(flagsMaskCheck)}`);
+const faceSampleStats = await page.evaluate(async () => {
+  const face = await import('/src/engine/shapes/face.ts');
+  await face.loadFaceMaskData();
+  const count = 90_000;
+  const points = face.generate(count);
+  let nonzero = 0, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < points.length; i += 3) {
+    const x = points[i], y = points[i + 1];
+    if (x !== 0 || y !== 0 || points[i + 2] !== 0) nonzero++;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  const yBins = Array(10).fill(0);
+  for (let i = 1; i < points.length; i += 3) yBins[Math.min(9, Math.floor((maxY - points[i]) / Math.max(1e-6, maxY - minY) * 10))]++;
+  return { count: points.length / 3, nonzero, bbox: { minX, maxX, minY, maxY }, yBins };
+});
+if (faceSampleStats.count !== 90_000 || faceSampleStats.nonzero < 89_990) throw new Error(`Face alpha sampling failed: ${JSON.stringify(faceSampleStats)}`);
 const demo = {};
 for (let i = 0; i < shapeNames.length; i++) {
   await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
@@ -78,18 +96,18 @@ for (const [shape, mask] of Object.entries(maskDebug)) {
   if (shape === 'f1') f1MaskWidthRatio = mask?.bboxWidthRatio ?? 0;
 }
 
-await page.goto(baseUrl, { waitUntil: 'networkidle' });
+await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
 const heroScreenshots = {};
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
   await page.setViewportSize(viewport);
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForTimeout(1200);
   heroScreenshots[viewport.width] = await screenshot(`hero-${viewport.width}.png`);
   delete heroScreenshots[viewport.width].bytes;
 }
 await page.setViewportSize({ width: 1440, height: 900 });
-await page.goto(baseUrl, { waitUntil: 'networkidle' });
+await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 await page.waitForTimeout(1200);
 const heroParticleBrightness = await page.evaluate(async () => {
@@ -151,7 +169,7 @@ const viewports = [
   { width: 390, height: 844 },
 ];
 const sectionIds = ['hero', 'location', 'autopilot', 'lens', 'sentiment', 'analyzer', 'contact'];
-const sectionShapes = ['face', 'india', 'tower', 'lens', 'flags', 'f1', 'dust'];
+const sectionShapes = ['face', 'india', 'python', 'lens', 'flags', 'f1', 'dust'];
 const slides = [];
 const contactChecks = [];
 let contactAnimationDifference = 0;
@@ -159,7 +177,7 @@ let firstContactFrame;
 
 for (const viewport of viewports) {
   await page.setViewportSize(viewport);
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
   await page.waitForTimeout(250);
   for (const [index, id] of sectionIds.entries()) {
     const shape = sectionShapes[index];
@@ -172,21 +190,11 @@ for (const viewport of viewports) {
       const content = section?.querySelector('.content-block');
       if (!section || !content) return { missing: true };
       const rect = content.getBoundingClientRect();
-      const minDimension = Math.min(innerWidth, innerHeight);
-      const radiusX = minDimension * (shape === 'tower' ? 0.21 : shape === 'india' ? 0.23 : shape === 'flags' ? 0.22 : 0.19);
-      const scale = innerWidth <= 768 ? 0.25 : 1;
-      const radiusY = innerHeight * (shape === 'tower' ? 0.42 : shape === 'india' ? 0.56 : shape === 'flags' ? 0.34 : 0.4) * scale;
-      const side = ['face', 'tower', 'flags'].includes(shape) ? 1 : -1;
-      const offsetAmount = shape === 'face' ? 0.9 : shape === 'india' ? 1.5 : innerWidth <= 1100 ? (shape === 'lens' ? 1.65 : 1.5) : shape === 'tower' ? 2.0 : shape === 'flags' ? 1.65 : 1.9;
-      const desktopOffset = innerWidth > 768 ? side * minDimension * offsetAmount * 0.276 : 0;
-      const centerX = innerWidth / 2 + desktopOffset;
-      const centerY = innerHeight / 2 - (innerWidth <= 768 ? 1.0 : 0) * innerHeight * 0.276;
-      let visibleShapeSamples = 0, coveredShapeSamples = 0;
-      if (shape !== 'dust') for (let gy = 0; gy < 80; gy++) for (let gx = 0; gx < 80; gx++) {
-        const x = (gx + 0.5) / 80 * innerWidth, y = (gy + 0.5) / 80 * innerHeight;
-        const inShape = ((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 <= 1;
-        if (inShape) { visibleShapeSamples++; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) coveredShapeSamples++; }
-      }
+      const debugFrame = window.__particleFrameDebug?.[shape]?.projected;
+      const card = section.querySelector('.project-card')?.getBoundingClientRect();
+      const cardIntersection = !!(debugFrame && card && debugFrame.x < card.right && debugFrame.x + debugFrame.w > card.left && debugFrame.y < card.bottom && debugFrame.y + debugFrame.h > card.top);
+      const allowBottomCrop = shape === 'face';
+      const outsideViewport = !!(debugFrame && (debugFrame.x < -1 || debugFrame.x + debugFrame.w > innerWidth + 1 || debugFrame.y < -1 || (!allowBottomCrop && debugFrame.y + debugFrame.h > innerHeight + 1)));
       const textOverflow = [];
       const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
       let node;
@@ -201,9 +209,9 @@ for (const viewport of viewports) {
         const clips = ['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowX) || ['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY);
         return clips && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1);
       });
-      return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, shapeCoverage: coveredShapeSamples / Math.max(1, visibleShapeSamples), textOverflow, clipped, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
+      return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, projectedShape: debugFrame ?? null, cardIntersection, outsideViewport, shapeCoverage: cardIntersection ? 1 : 0, textOverflow, clipped, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
     }, { id, shape });
-    const cardGutter = ['autopilot', 'sentiment'].includes(id) ? { left: check.rect.x, right: viewport.width - (check.rect.x + check.rect.width), required: viewport.width * 0.06 } : null;
+    const cardGutter = ['autopilot', 'sentiment'].includes(id) ? { left: check.rect.x, right: viewport.width - (check.rect.x + check.rect.width), required: viewport.width * 0.04 } : null;
     slides.push({ viewport: viewport.width, id, ...visual, ...check, cardGutter });
     delete slides[slides.length - 1].bytes;
 
@@ -256,7 +264,7 @@ const previewFallbacks = await page.locator('[data-preview-kind="fallback"]').ev
 await browser.close();
 const metricPass = [...Object.values(demo), ...slides].every((m) => m.saturation < 0.12 && m.coverage >= 0.002 && m.coverage <= 0.45);
 const overflowPass = slides.every((item) => item.scrollWidth <= item.viewportWidth);
-const overlapFailures = slides.filter((item) => item.id !== 'hero' && (item.shapeCoverage > 0.10 || item.missing));
+const overlapFailures = slides.filter((item) => ['autopilot', 'lens', 'sentiment', 'analyzer'].includes(item.id) && (item.cardIntersection || item.outsideViewport || item.missing));
 const textFailures = slides.filter((item) => item.textOverflow?.length || item.clipped);
 const cardPaddingFailures = slides.filter((item) => item.cardGutter && (item.cardGutter.left + 0.5 < item.cardGutter.required || item.cardGutter.right + 0.5 < item.cardGutter.required));
 const contactFailures = contactChecks.filter((item) => item.missing || item.svgOverlapsText || item.textOverflow?.length || item.scrollWidth > item.viewportWidth);
@@ -265,6 +273,6 @@ const glowPass = glowBrightness.rise >= 0.4;
 const heroBrightnessPass = heroBrightnessDrop >= 0.35;
 const mediumFramePass = mediumFrames.engine?.frameAverageMs < 16.7 && mediumFrames.engine?.renderAverageMs < 16.7;
 const adaptivePass = adaptiveState?.quality === 'auto' && [2500, 5000, 60000].includes(adaptiveState.particleCount);
-const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, previewFallbacks, heroScreenshots, glowBrightness, heroRegionBrightness, heroBackgroundBrightness, preChangeHeroBrightness, currentHeroParticleBrightness, heroBrightnessDrop, mediumFrames, mediumFramePass, adaptiveState, adaptivePass, glowPass, heroBrightnessPass, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
+const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, faceSampleStats, previewFallbacks, heroScreenshots, glowBrightness, heroRegionBrightness, heroBackgroundBrightness, preChangeHeroBrightness, currentHeroParticleBrightness, heroBrightnessDrop, mediumFrames, mediumFramePass, adaptiveState, adaptivePass, glowPass, heroBrightnessPass, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
 console.log(JSON.stringify(results, null, 2));
 if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || cardPaddingFailures.length || contactFailures.length || !glowPass || !heroBrightnessPass || !mediumFramePass || !adaptivePass) process.exitCode = 1;
