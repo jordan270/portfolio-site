@@ -13,7 +13,6 @@ import { initComet } from './ui/comet';
 import { initReveal } from './ui/reveal';
 import { initInfinity } from './ui/infinity';
 import { initProjectCards } from './ui/projectCards';
-import { initParticleFrames } from './ui/frames';
 
 function initApp(): void {
   const stage = document.getElementById('stage');
@@ -48,7 +47,6 @@ function initApp(): void {
   // 6. Initialize the contact illustration and text reveals
   initInfinity();
   initProjectCards();
-  initParticleFrames(engine);
   initReveal();
 
   // 7. Initialize Lenis + GSAP ScrollTrigger morph syncing

@@ -5,7 +5,7 @@ One cloud of particles morphs between the story's shapes as the user scrolls.
 The site is monochrome, minimal, and cinematic, and remains readable with the
 particles switched off.
 
-Flow: face -> india -> python -> lens -> flags -> f1 -> dust
+Flow: face -> india -> tower -> lens -> flags -> f1 -> dust
 
 ## Design tokens
 - Background: #26262b
@@ -27,7 +27,7 @@ Flow: face -> india -> python -> lens -> flags -> f1 -> dust
 Seven sections in this exact order, with alternating text sides:
 1. hero      data-shape="face"      text left
 2. location  data-shape="india"     text right
-3. autopilot data-shape="python"    text left
+3. autopilot data-shape="tower"     text left
 4. lens      data-shape="lens"      text right
 5. sentiment data-shape="flags"     text left
 6. analyzer  data-shape="f1"        text right
@@ -36,11 +36,8 @@ Seven sections in this exact order, with alternating text sides:
 Hero is 120vh, project sections are 110vh on desktop and 100vh on small
 screens, and contact is at least 100vh. The four project sections are cards
 with a 16:9 preview, title and 2026 year row, short description, tags, and
-links. Use `assets/projects/{autopilot,rhetoriclens,f1-sentiment,f1-analyzer}.webp`
-for card previews and keep typographic fallback for missing previews.
-AutoPilot has no preview link and displays "Code not public". F1 sentiment and
-analyzer previews carry a small "CONCEPT VISUAL" tag. Previews are centred and
-cover their frame; if the AutoPilot banner is cropped, contain it on `#0b0f1a`.
+links. Preview files come from `assets/projects/`; if none exists, show a
+typographic fallback with the project title, tags, and specified key fact.
 Videos play only while visible and when reduced motion is off.
 Contact stacks a drawn infinity, label, paragraph, and links in the centre.
 The dust particle field stays behind the content and dims to 60% opacity there.
@@ -69,8 +66,7 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - Text: A rule-based tower-defence agent in pure Python, scoring 357.78 across
   four public test cases.
 - Tags: Python
-- Preview: static and non-focusable; not wrapped in a link. Use its WebP banner
-  and preserve the full AUTOPILOT wordmark and logo.
+- Preview: static and non-focusable; not wrapped in a link.
 - Link row: "Code not public" (plain dim text; no project link).
 
 ### Lens
@@ -109,31 +105,27 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - NEVER show a phone number, street address, or age anywhere on the site.
 ## Shapes (public names)
 ```ts
-export type ShapeName = 'face' | 'india' | 'python' | 'lens' | 'flags' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
 ```
 - `dust`: a sparse, wide, slowly drifting background field; it fills the
   viewport without a figure and dims to 60% opacity on the contact slide.
-- `face`: about 90,000 irregular blue-noise samples from the private portrait
-  mask, with random full-area jitter and no bottom fade. If source shoulders
-  are narrow or asymmetrical, synthesize a smooth symmetric shoulder fill.
-  Center on the neck midline, use subtle depth (about 0.15 figure heights), and
-  give face particles a 0.9 multiplier relative to global dimming. Render a
-  frontal bust with random 1.0–1.9 px particles and no hologram effects; idle
-  yaw and mouse parallax stay within ±4 degrees.
+- `face`: about 70,000 points sampled uniformly by area inside the private
+  portrait mask, with an 8% thin rim band 2–3 pixels inside the silhouette.
+  Optional locally normalized luminance modulation is limited to ±15%. Depth
+  is subtle (about 0.15 figure heights); only the bottom edge fades. Render as
+  a dim, evenly filled frontal bust spanning the viewport height, with small
+  1–1.6 device-pixel particles and no scanline, flicker, scan-band, or base
+  ring effects. At rest idle yaw and mouse parallax stay within ±4 degrees.
 - `india`: official India outline from `assets/india.svg`, scaled to about
   75% of desktop viewport height, with a bright Delhi NCR cluster and subtle
   pulsing ring while india is dominant.
-- `python`: Python logo from `assets/python.svg`, rasterised at 1024 px with 8%
-  padding and sampled from alpha > 0.1. Centre its mask bounds, scale its larger
-  side to about 1.5 units, use ±0.03 z jitter, and emphasize the snake outlines.
+- `tower`: tall castle-style defence tower with eight spaced merlons, sparse
+  slit windows, and two concentric ground range rings.
 - `lens`: magnifying glass (torus rim, sparse glass disc, highlight arc, and
   handle at about 45 degrees).
 - `flags`: crossed checkered flags sampled from `assets/flags.png`, weighted
   toward flag edges and poles so the checker pattern reads clearly.
 - `f1`: sampled Formula 1 logo silhouette with slight z jitter.
-
-The AutoPilot and RhetoricLens previews are project imagery. F1 sentiment and
-analyzer preview images are concept visuals and are labelled accordingly.
 
 Project-card alternation: AutoPilot and sentiment are on the left; Lens and
 Analyzer are on the right. On small screens, cards use the lower part of the
@@ -156,7 +148,6 @@ F1 sampling prefers `assets/f1.svg` when present and falls back to
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
   setMorph(from: ShapeName, to: ShapeName, t: number); // t 0..1
-  setFrame(rect: { x: number; y: number; w: number; h: number }, shape?: ShapeName): void;
   setEnergy(value: number): void;
   setQuality(q: 'high' | 'medium' | 'low' | 'auto'): void;
   setGlow(options: { radius?: number; dim?: number; boost?: number }): void;
@@ -170,8 +161,6 @@ container.
 
 ## Performance
 - Adaptive quality (high 60k, medium 5k, low 2.5k particles)
-- Fit each shape inside its measured CSS-pixel frame, preserving aspect ratio;
-  interpolate between the frames belonging to the two morph endpoints.
 - DPR capped at 2, pause when the tab is hidden
 - Uniform default alpha multiplier `uBaseDim` is 0.45. Cursor glow defaults to
   140 CSS pixels, boosts alpha by up to `1 / dim`, and grows points by up to

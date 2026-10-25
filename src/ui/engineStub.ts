@@ -1,5 +1,4 @@
-export type ShapeName = 'face' | 'india' | 'python' | 'lens' | 'flags' | 'f1' | 'dust';
-export type FrameRect = { x: number; y: number; w: number; h: number };
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 
 export interface ParticleEngine {
@@ -7,7 +6,6 @@ export interface ParticleEngine {
   mount(container: HTMLElement): void;
   /** Morph between two shapes. t is 0..1. Called every frame by scroll. */
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
-  setFrame(rect: FrameRect, shape?: ShapeName): void;
   /** Slow idle rotation/drift multiplier, default 1 */
   setEnergy(value: number): void;
   /** Adaptive particle density quality */
@@ -63,15 +61,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
         x = Math.sin(phi) * Math.cos(theta) * 0.75;
         y = (Math.cos(phi) * 1.1) + Math.sin(x * 3) * 0.1;
         z = Math.sin(phi) * Math.sin(theta) * 0.6;
-      } else if (shape === 'python') {
-        const snake = i % 2 ? -1 : 1;
-        const t = (i % Math.ceil(count / 2)) / Math.ceil(count / 2);
-        const angle = t * Math.PI * 2;
-        const radius = 0.29 + (i % 4 < 2 ? 0.08 : 0);
-        x = snake * 0.25 + Math.cos(angle) * radius;
-        y = snake * -0.22 + Math.sin(angle) * radius;
-        z = (Math.random() - 0.5) * 0.06;
-      } else if (shape === 'india') {
+      } else if (shape === 'india' || shape === 'tower') {
         // India representation for stub-only UI previews; production uses the engine mask.
         if (i < count * 0.3) {
           // Base range rings
@@ -135,7 +125,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
   const shapes: Record<ShapeName, Point3D[]> = {
     face: generateShapePoints('face', dotCount),
     india: generateShapePoints('india', dotCount),
-    python: generateShapePoints('python', dotCount),
+    tower: generateShapePoints('tower', dotCount),
     lens: generateShapePoints('lens', dotCount),
     flags: generateShapePoints('flags', dotCount),
     f1: generateShapePoints('f1', dotCount),
@@ -226,7 +216,6 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       morphT = Math.max(0, Math.min(1, t));
       console.log(`[engineStub] setMorph: ${currentFrom} -> ${currentTo} (t: ${morphT.toFixed(3)})`);
     },
-    setFrame(_rect, _shape) {},
 
     setEnergy(value: number) {
       energy = value;
