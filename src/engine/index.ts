@@ -4,10 +4,10 @@ import { generate as india, loadIndiaData } from './shapes/india.ts';
 import { generate as lens } from './shapes/lens.ts';
 import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
 import { generate as tower } from './shapes/tower.ts';
-import { generate as bubble } from './shapes/bubble.ts';
+import { generate as flags, loadFlagsData } from './shapes/flags.ts';
 import { generate as dust } from './shapes/dust.ts';
 
-export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
@@ -19,7 +19,7 @@ export interface ParticleEngine {
   dispose(): void;
 }
 
-const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, tower, lens, bubble, f1, dust };
+const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, tower, lens, flags, f1, dust };
 
 function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
   if (name === 'sphere') return 'face';
@@ -229,13 +229,14 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     if (typeof window !== 'undefined' && window.innerWidth <= 1100) {
       if (shape === 'face') return 0.9;
       if (shape === 'india') return -1.5;
-      if (shape === 'tower' || shape === 'bubble') return 1.5;
+      if (shape === 'tower' || shape === 'flags') return 1.5;
       if (shape === 'lens') return -1.65;
       return -1.5;
     }
     if (shape === 'face') return 0.9;
     if (shape === 'india') return -1.5;
-    if (shape === 'tower' || shape === 'bubble') return 2.0;
+    if (shape === 'tower') return 2.0;
+    if (shape === 'flags') return 1.65;
     return shape === 'lens' ? -1.9 : -2.0;
   };
   const layoutOffsetY = () => {
@@ -297,10 +298,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       window.addEventListener('pointermove', onPointer, { passive: true });
       window.addEventListener('pointerleave', onPointerLeave, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
-      void Promise.all([loadFaceData(), loadIndiaData(), loadF1Source()]).then(() => {
+      void Promise.all([loadFaceData(), loadIndiaData(), loadF1Source(), loadFlagsData()]).then(() => {
         if (disposed || !geometry) return;
-        shapeCache.delete('face'); shapeCache.delete('india'); shapeCache.delete('f1');
-        if (fromName === 'face' || toName === 'face' || fromName === 'india' || toName === 'india' || fromName === 'f1' || toName === 'f1') installShapes(fromName, toName);
+        shapeCache.delete('face'); shapeCache.delete('india'); shapeCache.delete('f1'); shapeCache.delete('flags');
+        if (fromName === 'face' || toName === 'face' || fromName === 'india' || toName === 'india' || fromName === 'f1' || toName === 'f1' || fromName === 'flags' || toName === 'flags') installShapes(fromName, toName);
       });
       raf = requestAnimationFrame(render);
     },

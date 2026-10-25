@@ -1,4 +1,4 @@
-export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 
 export interface ParticleEngine {
@@ -93,11 +93,13 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
           y = -0.45 - hP * 0.6;
           z = 0;
         }
-      } else if (shape === 'bubble') {
-        const a = u * Math.PI * 2;
-        x = Math.cos(a) * 0.68; y = Math.sin(a) * 0.52;
-        if (u > 0.63 && u < 0.73) { x = -0.2 - (u - 0.63) * 3; y = -0.42 - (u - 0.63) * 3; }
-        z = (Math.random() - 0.5) * 0.04;
+      } else if (shape === 'flags') {
+        const flag = i % 2 ? -1 : 1;
+        const a = u * Math.PI * 8;
+        x = flag * 0.36 + Math.cos(a) * 0.38;
+        y = 0.22 + Math.sin(a) * 0.27;
+        if (u > 0.72) { x = (u - 0.72) * 1.2 * (i % 2 ? -1 : 1); y = -0.2 - (u - 0.72) * 1.8; }
+        z = flag * x * 0.05 + (Math.random() - 0.5) * 0.06;
       } else if (shape === 'f1') {
         // Elongated F1 car silhouette
         x = (u - 0.5) * 2.2;
@@ -124,7 +126,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
     india: generateShapePoints('india', dotCount),
     tower: generateShapePoints('tower', dotCount),
     lens: generateShapePoints('lens', dotCount),
-    bubble: generateShapePoints('bubble', dotCount),
+    flags: generateShapePoints('flags', dotCount),
     f1: generateShapePoints('f1', dotCount),
     dust: generateShapePoints('dust', dotCount),
   };

@@ -32,7 +32,7 @@ async function screenshot(name, allowAnimations = false) {
   return { bytes, ...pixelStats(bytes) };
 }
 
-const shapeNames = ['face', 'india', 'tower', 'lens', 'bubble', 'f1', 'dust'];
+const shapeNames = ['face', 'india', 'tower', 'lens', 'flags', 'f1', 'dust'];
 await page.goto(`${baseUrl}/src/engine/demo.html?quality=high&debugMasks=1`, { waitUntil: 'networkidle' });
 const f1ContrastCases = await page.evaluate(async () => {
   const source = new Image(); source.src = '/assets/f1.png'; await source.decode();
@@ -56,6 +56,14 @@ const f1ContrastCases = await page.evaluate(async () => {
   return cases;
 });
 if (f1ContrastCases.length !== 2 || f1ContrastCases.some((item) => item.pixels < 1000 || item.bboxWidthRatio < 0.6)) throw new Error(`F1 contrast mask checks failed: ${JSON.stringify(f1ContrastCases)}`);
+const flagsMaskCheck = await page.evaluate(async () => {
+  const { loadFlagsData, generate, verifyMaskSamples } = await import('/src/engine/shapes/flags.ts');
+  await loadFlagsData();
+  const count = 4096;
+  const seeds = Float32Array.from({ length: count }, (_, i) => (i + 0.5) / count);
+  return verifyMaskSamples(generate(count, seeds));
+});
+if (flagsMaskCheck.total !== 4096 || flagsMaskCheck.outside !== 0) throw new Error(`Flags mask leak check failed: ${JSON.stringify(flagsMaskCheck)}`);
 const demo = {};
 for (let i = 0; i < shapeNames.length; i++) {
   await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
@@ -73,12 +81,13 @@ for (const [shape, mask] of Object.entries(maskDebug)) {
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
 const viewports = [
   { width: 1440, height: 900 },
+  { width: 1280, height: 800 },
   { width: 1024, height: 768 },
   { width: 768, height: 1024 },
   { width: 390, height: 844 },
 ];
 const sectionIds = ['hero', 'location', 'autopilot', 'lens', 'sentiment', 'analyzer', 'contact'];
-const sectionShapes = ['face', 'india', 'tower', 'lens', 'bubble', 'f1', 'dust'];
+const sectionShapes = ['face', 'india', 'tower', 'lens', 'flags', 'f1', 'dust'];
 const slides = [];
 const contactChecks = [];
 let contactAnimationDifference = 0;
@@ -100,11 +109,11 @@ for (const viewport of viewports) {
       if (!section || !content) return { missing: true };
       const rect = content.getBoundingClientRect();
       const minDimension = Math.min(innerWidth, innerHeight);
-      const radiusX = minDimension * (shape === 'tower' ? 0.21 : shape === 'india' ? 0.19 : 0.19);
+      const radiusX = minDimension * (shape === 'tower' ? 0.21 : shape === 'india' ? 0.23 : shape === 'flags' ? 0.22 : 0.19);
       const scale = innerWidth <= 768 ? 0.25 : 1;
-      const radiusY = innerHeight * (shape === 'tower' ? 0.42 : 0.4) * scale;
-      const side = ['face', 'tower', 'bubble'].includes(shape) ? 1 : -1;
-      const offsetAmount = shape === 'face' ? 0.9 : shape === 'india' ? 1.5 : innerWidth <= 1100 ? (shape === 'lens' ? 1.65 : 1.5) : shape === 'tower' || shape === 'bubble' ? 2.0 : 1.9;
+      const radiusY = innerHeight * (shape === 'tower' ? 0.42 : shape === 'india' ? 0.56 : shape === 'flags' ? 0.34 : 0.4) * scale;
+      const side = ['face', 'tower', 'flags'].includes(shape) ? 1 : -1;
+      const offsetAmount = shape === 'face' ? 0.9 : shape === 'india' ? 1.5 : innerWidth <= 1100 ? (shape === 'lens' ? 1.65 : 1.5) : shape === 'tower' ? 2.0 : shape === 'flags' ? 1.65 : 1.9;
       const desktopOffset = innerWidth > 768 ? side * minDimension * offsetAmount * 0.276 : 0;
       const centerX = innerWidth / 2 + desktopOffset;
       const centerY = innerHeight / 2 - (innerWidth <= 768 ? 1.0 : 0) * innerHeight * 0.276;
@@ -130,7 +139,8 @@ for (const viewport of viewports) {
       });
       return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, shapeCoverage: coveredShapeSamples / Math.max(1, visibleShapeSamples), textOverflow, clipped, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
     }, { id, shape });
-    slides.push({ viewport: viewport.width, id, ...visual, ...check });
+    const cardGutter = ['autopilot', 'sentiment'].includes(id) ? { left: check.rect.x, right: viewport.width - (check.rect.x + check.rect.width), required: viewport.width * 0.06 } : null;
+    slides.push({ viewport: viewport.width, id, ...visual, ...check, cardGutter });
     delete slides[slides.length - 1].bytes;
 
     if (id === 'contact') {
@@ -184,8 +194,9 @@ const metricPass = [...Object.values(demo), ...slides].every((m) => m.saturation
 const overflowPass = slides.every((item) => item.scrollWidth <= item.viewportWidth);
 const overlapFailures = slides.filter((item) => item.shapeCoverage > 0.10 || item.missing);
 const textFailures = slides.filter((item) => item.textOverflow?.length || item.clipped);
+const cardPaddingFailures = slides.filter((item) => item.cardGutter && (item.cardGutter.left + 0.5 < item.cardGutter.required || item.cardGutter.right + 0.5 < item.cardGutter.required));
 const contactFailures = contactChecks.filter((item) => item.missing || item.svgOverlapsText || item.textOverflow?.length || item.scrollWidth > item.viewportWidth);
 const animationPass = contactAnimationDifference > 0.00008;
-const results = { baseUrl, demo, f1ContrastCases, previewFallbacks, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, contactFailures, overflowPass, animationPass, errors };
+const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, previewFallbacks, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
 console.log(JSON.stringify(results, null, 2));
-if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || contactFailures.length) process.exitCode = 1;
+if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || cardPaddingFailures.length || contactFailures.length) process.exitCode = 1;

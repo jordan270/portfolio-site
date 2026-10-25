@@ -5,7 +5,7 @@ One cloud of particles morphs between the story's shapes as the user scrolls.
 The site is monochrome, minimal, and cinematic, and remains readable with the
 particles switched off.
 
-Flow: face -> india -> tower -> lens -> bubble -> f1 -> dust
+Flow: face -> india -> tower -> lens -> flags -> f1 -> dust
 
 ## Design tokens
 - Background: #26262b
@@ -26,7 +26,7 @@ Seven sections in this exact order, with alternating text sides:
 2. location  data-shape="india"     text right
 3. autopilot data-shape="tower"     text left
 4. lens      data-shape="lens"      text right
-5. sentiment data-shape="bubble"    text left
+5. sentiment data-shape="flags"     text left
 6. analyzer  data-shape="f1"        text right
 7. contact   data-shape="dust"     text centred, drawn infinity above text
 
@@ -97,20 +97,22 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - NEVER show a phone number, street address, or age anywhere on the site.
 ## Shapes (public names)
 ```ts
-export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
 ```
 - `dust`: a sparse, wide, slowly drifting background field; it fills the
   viewport without a figure and dims to 60% opacity on the contact slide.
 - `face`: baked 45,000-point photo-derived cloud split 45% face, 20% hair and
   35% body. Face detail leads over softened clothing texture; the desktop
   bust fills about 80% of viewport height, with a soft side and lower fade.
-- `india`: official India outline from `assets/india.svg`, with a bright
-  Delhi NCR cluster and a subtle pulsing ring while india is dominant.
+- `india`: official India outline from `assets/india.svg`, scaled to about
+  75% of desktop viewport height, with a bright Delhi NCR cluster and subtle
+  pulsing ring while india is dominant.
 - `tower`: tall castle-style defence tower with eight spaced merlons, sparse
   slit windows, and two concentric ground range rings.
 - `lens`: magnifying glass (torus rim, sparse glass disc, highlight arc, and
   handle at about 45 degrees).
-- `bubble`: speech-bubble silhouette made of particles.
+- `flags`: crossed checkered flags sampled from `assets/flags.png`, weighted
+  toward flag edges and poles so the checker pattern reads clearly.
 - `f1`: sampled Formula 1 logo silhouette with slight z jitter.
 
 Project-card alternation: AutoPilot and sentiment are on the left; Lens and

@@ -58,5 +58,8 @@ export function generate(count: number, seeds?: Float32Array): Float32Array {
       points[i * 3 + 2] = 0.068;
     }
   }
+  // Increase the mapped outline from roughly 55% to 75% of desktop viewport height.
+  const mapScale = 1.36;
+  for (let i = 0; i < count; i++) { points[i * 3] *= mapScale; points[i * 3 + 1] *= mapScale; }
   return points;
 }

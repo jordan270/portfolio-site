@@ -150,7 +150,7 @@ html.lenis, html.lenis body {
   .section--lens { padding-right: 4vw; }
 }
 .section--autopilot,
-.section--sentiment { padding-left: 6vw; }
+.section--sentiment { padding-inline: 6vw; }
 
 .section--autopilot .content-block,
 .section--lens .content-block,
@@ -199,6 +199,7 @@ html.lenis, html.lenis body {
 .preview-fact { margin-top: .75rem; color: rgba(255,255,255,.75); font-size: clamp(.75rem, 1.4vw, 1rem); }
 .project-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-top: .8rem; }
 .project-title-row h2 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: 400; }
+.project-title-row h2 { overflow-wrap: normal; }
 .project-year { flex: none; color: var(--text-dim); font-size: 1rem; }
 .project-description { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin-top: .45rem; font-size: clamp(.92rem, 1.25vw, 1rem); line-height: 1.4; }
 .project-label, .project-tags { margin-top: .45rem; color: var(--text-dim); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }

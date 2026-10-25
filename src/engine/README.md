@@ -1,10 +1,12 @@
 # Particle engine
 
-`createEngine(opts?)` mounts one additive particle cloud. `setMorph(from, to, t)` blends between shapes using stable per-particle seeds; `setEnergy`, `setQuality`, `resize`, and `dispose` control motion, adaptive particle count, viewport sizing, and cleanup. The exported `ShapeName` is exactly `'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust'`. The engine accepts the old UI labels as temporary aliases (`sphere`→`face`, `map`→`india`, `helix`→`lens`, `galaxy`→`dust`) so existing callers keep working without changing UI-owned files.
+`createEngine(opts?)` mounts one additive particle cloud. `setMorph(from, to, t)` blends between shapes using stable per-particle seeds; `setEnergy`, `setQuality`, `resize`, and `dispose` control motion, adaptive particle count, viewport sizing, and cleanup. The exported `ShapeName` is exactly `'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust'`. The engine accepts the old UI labels as temporary aliases (`sphere`→`face`, `map`→`india`, `helix`→`lens`, `galaxy`→`dust`) so existing callers keep working without changing UI-owned files.
 
 ## Shapes
 
-- `india`: samples the supplied `assets/india.svg` mask, emphasizing the outline and a small Delhi NCR particle cluster. If the asset is absent it warns and uses dust.
+- `flags`: samples only alpha-opaque pixels from `assets/flags.png`, weighting flag edges and poles so the crossed checker pattern stays legible.
+
+- `india`: samples the supplied `assets/india.svg` mask, emphasizing the outline and a small Delhi NCR particle cluster. If the asset is absent it warns and uses dust. The outline is scaled to about 75% of desktop viewport height.
 - `lens`: thin torus, sparse glass, upper-left highlight arc, and a 45° handle.
 - `f1`: samples `/assets/f1.svg` first when present, then `/assets/f1.png`. PNG sampling uses alpha when meaningful, or detects foreground against the averaged corner colour, closes small holes, and retains the main logo components.
 - `dust`: sparse, wide background field that fills the viewport, drifts slowly,
