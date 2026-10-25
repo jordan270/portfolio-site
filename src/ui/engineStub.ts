@@ -1,4 +1,4 @@
-export type ShapeName = 'face' | 'india' | 'lens' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 
 export interface ParticleEngine {
@@ -60,7 +60,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
         x = Math.sin(phi) * Math.cos(theta) * 0.75;
         y = (Math.cos(phi) * 1.1) + Math.sin(x * 3) * 0.1;
         z = Math.sin(phi) * Math.sin(theta) * 0.6;
-      } else if (shape === 'india') {
+      } else if (shape === 'india' || shape === 'tower') {
         // India representation for stub-only UI previews; production uses the engine mask.
         if (i < count * 0.3) {
           // Base range rings
@@ -93,6 +93,11 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
           y = -0.45 - hP * 0.6;
           z = 0;
         }
+      } else if (shape === 'bubble') {
+        const a = u * Math.PI * 2;
+        x = Math.cos(a) * 0.68; y = Math.sin(a) * 0.52;
+        if (u > 0.63 && u < 0.73) { x = -0.2 - (u - 0.63) * 3; y = -0.42 - (u - 0.63) * 3; }
+        z = (Math.random() - 0.5) * 0.04;
       } else if (shape === 'f1') {
         // Elongated F1 car silhouette
         x = (u - 0.5) * 2.2;
@@ -100,12 +105,11 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
         y = bodyY - 0.3;
         z = (Math.sin(u * 12) * 0.35) * (1 - Math.abs(u - 0.5));
       } else {
-        // Dust: loose, wide, flat drifting field of sparse particles
-        const angle = Math.random() * Math.PI * 2;
-        const dist = Math.sqrt(Math.random()) * 1.6;
-        x = Math.cos(angle) * dist;
-        y = (Math.random() - 0.5) * 0.5;
-        z = Math.sin(angle) * dist;
+        // Dust: a wide field of sparse particles with no central figure.
+        x = (Math.random() * 2 - 1) * 3.2;
+        y = (Math.random() * 2 - 1) * 2.05;
+        if (Math.random() > 0.27) x += 100;
+        z = (Math.random() - 0.5) * 0.12;
       }
 
       const alpha = 0.35 + (i * 17 % 65) / 100;
@@ -118,7 +122,9 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
   const shapes: Record<ShapeName, Point3D[]> = {
     face: generateShapePoints('face', dotCount),
     india: generateShapePoints('india', dotCount),
+    tower: generateShapePoints('tower', dotCount),
     lens: generateShapePoints('lens', dotCount),
+    bubble: generateShapePoints('bubble', dotCount),
     f1: generateShapePoints('f1', dotCount),
     dust: generateShapePoints('dust', dotCount),
   };
@@ -172,7 +178,8 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       const screenX = cx + rx * scale * zDist;
       const screenY = cy + py * scale * zDist;
 
-      const alpha = (pA.alpha + (pB.alpha - pA.alpha) * morphT) * Math.min(1, Math.max(0.2, zDist));
+      const dustWeight = (currentFrom === 'dust' ? 1 - morphT : 0) + (currentTo === 'dust' ? morphT : 0);
+      const alpha = (pA.alpha + (pB.alpha - pA.alpha) * morphT) * Math.min(1, Math.max(0.2, zDist)) * (1 - 0.4 * dustWeight);
       const size = pA.size * zDist;
 
       ctx.beginPath();

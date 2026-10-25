@@ -117,30 +117,34 @@ html.lenis, html.lenis body {
   padding-left: 5vw;
 }
 
-.section--autopilot {
+.section--location,
+.section--lens,
+.section--analyzer {
   min-height: 110vh;
   justify-content: flex-end;
   text-align: right;
 }
 
-.section--lens {
+.section--autopilot,
+.section--sentiment {
   min-height: 110vh;
   justify-content: flex-start;
   text-align: left;
-}
-
-.section--f1 {
-  min-height: 110vh;
-  justify-content: flex-end;
-  text-align: right;
 }
 
 .section--contact {
   min-height: 100vh;
   justify-content: center;
   text-align: center;
-  padding: 0 6vw;
+  align-items: center;
+  padding: 6vh 6vw;
 }
+
+.section--location,
+.section--lens,
+.section--analyzer { padding-right: 6vw; }
+.section--autopilot,
+.section--sentiment { padding-left: 6vw; }
 
 /* Content stays in a bounded column so it cannot cover the hologram. */
 .content-block {
@@ -157,10 +161,24 @@ html.lenis, html.lenis body {
 
 .section--contact .content-block {
   margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  z-index: 2;
 }
 
-.section--autopilot .content-block,
-.section--f1 .content-block {
+.section--contact .section-label,
+.section--contact .cs50-footer {
+  margin: 0;
+}
+
+.section--location .content-block,
+.section--lens .content-block,
+.section--analyzer .content-block {
   margin-left: auto;
 }
 
@@ -221,11 +239,110 @@ p {
 }
 
 .contact-lead {
-  font-size: clamp(1.35rem, 2.5vw, 2.15rem);
-  line-height: 1.35;
+  width: min(36rem, 88vw);
+  max-width: calc(100vw - 12vw);
+  text-align: center;
+  text-wrap: balance;
+  font-size: clamp(1.1rem, 1.6vw, 1.5rem);
+  line-height: 1.5;
   color: var(--text-color);
-  max-width: 34ch;
-  margin: 0 auto 2.2rem;
+  margin: 0 auto;
+}
+
+.contact-infinity {
+  display: block;
+  position: relative;
+  z-index: 1;
+  width: min(70vw, 560px);
+  height: auto;
+  aspect-ratio: 2 / 1;
+  overflow: visible;
+  flex: none;
+  margin-inline: auto;
+}
+
+.contact-infinity path {
+  fill: none;
+  stroke: #fff;
+  vector-effect: non-scaling-stroke;
+}
+
+.contact-infinity .infinity-track {
+  stroke-width: 1.5;
+  opacity: 0.14;
+  stroke-dasharray: 1000 1000;
+  stroke-dashoffset: 1000;
+}
+
+.contact-infinity .infinity-trail,
+.contact-infinity .infinity-glow,
+.contact-infinity .infinity-runner {
+  stroke-linecap: round;
+  stroke-dasharray: 180 820;
+  stroke-dashoffset: 1000;
+}
+
+.contact-infinity .infinity-trail {
+  stroke-width: 2;
+  stroke-dasharray: 110 890;
+  opacity: 0.45;
+}
+
+.contact-infinity .infinity-glow {
+  stroke-width: 2.5;
+  opacity: 0.5;
+  filter: url(#infinity-glow);
+}
+
+.contact-infinity .infinity-runner {
+  stroke-width: 2.5;
+  opacity: 0.95;
+}
+
+.contact-infinity.is-visible .infinity-track {
+  animation: infinity-draw 1.2s ease-out forwards;
+}
+
+.contact-infinity.is-visible .infinity-trail,
+.contact-infinity.is-visible .infinity-glow,
+.contact-infinity.is-visible .infinity-runner {
+  animation: infinity-travel 6s linear 1.2s infinite;
+}
+
+.contact-infinity.is-visible .infinity-trail {
+  animation-name: infinity-trail-travel;
+}
+
+@keyframes infinity-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes infinity-travel {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -1000; }
+}
+
+@keyframes infinity-trail-travel {
+  from { stroke-dashoffset: -500; }
+  to { stroke-dashoffset: -1500; }
+}
+
+.contact-links {
+  justify-content: center;
+  gap: 0.6rem 1.2rem;
+}
+
+.contact-links > a {
+  white-space: nowrap;
+}
+
+.contact-links > a:not(:first-child)::before {
+  content: '•';
+  display: inline-block;
+  margin-right: 1.2rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-decoration: none;
 }
 
 /* Badge for AutoPilot */
@@ -375,27 +492,41 @@ a:focus-visible {
     max-width: 100%;
   }
 
+  .section--location,
   .section--autopilot,
   .section--lens,
-  .section--f1 {
+  .section--sentiment,
+  .section--analyzer {
     min-height: 110vh;
   }
 
   .section--contact {
     min-height: 100vh;
+    align-items: center;
+    padding: 4vh 6vw;
   }
 
   /* Reset right-alignment on mobile for natural reading flow */
-  .section--autopilot,
-  .section--f1 {
+  .section--location,
+  .section--lens,
+  .section--analyzer {
     justify-content: flex-start;
     text-align: left;
   }
 
-  .section--autopilot .content-block,
-  .section--f1 .content-block {
-    margin-left: 0;
+  .section--location,
+  .section--lens,
+  .section--analyzer,
+  .section--autopilot,
+  .section--sentiment {
+    padding-left: max(7vw, 1.5rem);
+    padding-right: max(6vw, 1.5rem);
   }
+
+  .section--location .content-block,
+  .section--lens .content-block,
+  .section--analyzer .content-block { margin-left: 0; }
+
 
   .text-right .links-inline {
     justify-content: flex-start;
@@ -411,7 +542,15 @@ a:focus-visible {
   }
 
   .contact-lead {
-    margin-bottom: 1.5rem;
+    margin: 0 auto;
+  }
+
+  .section--contact .content-block {
+    gap: 1.5rem;
+  }
+
+  .contact-infinity {
+    width: 80vw;
   }
 
   .cs50-footer {
@@ -434,5 +573,18 @@ a:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .contact-infinity .infinity-track,
+  .contact-infinity.is-visible .infinity-track,
+  .contact-infinity.is-visible .infinity-trail,
+  .contact-infinity.is-visible .infinity-glow,
+  .contact-infinity.is-visible .infinity-runner {
+    animation: none !important;
+    stroke-dashoffset: 0;
+  }
+
+  .contact-infinity .infinity-trail {
+    display: none;
   }
 }

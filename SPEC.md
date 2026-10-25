@@ -1,44 +1,52 @@
 # SPEC: Garv Kapoor Portfolio (particle morph)
 
 ## Concept
-A single-page scroll experience. One cloud of particles morphs between
-shapes as the user scrolls. Each shape matches the story beside it.
-Monochrome, minimal, cinematic. The page must still read well with
-the particles switched off (real text, real links).
+One cloud of particles morphs between the story's shapes as the user scrolls.
+The site is monochrome, minimal, and cinematic, and remains readable with the
+particles switched off.
 
-Flow: face -> india -> lens -> f1 -> dust
+Flow: face -> india -> tower -> lens -> bubble -> f1 -> dust
 
 ## Design tokens
 - Background: #26262b
 - Particles and text: white, opacity 0.35 to 1.0
 - Font: Inter (weights 300/400), letter-spacing -0.02em
-- Text size: clamp(1.25rem, 2.2vw, 2rem), max 3 lines per paragraph
+- Text size: clamp(1.25rem, 2.2vw, 2rem)
 - Only accent: a small green dot (#21e065) beside "Open to internships"
-- One glowing white comet follows the cursor with eased motion and a
-  tapering trail (desktop only)
-- No other colours, no gradients, no UI chrome. Generous empty space.
+- One glowing white comet follows the cursor with eased motion and a tapering
+  trail (desktop only)
+- No boxes, gradients, or UI chrome. Generous empty space.
 - Respect prefers-reduced-motion everywhere.
 
-## Sections (each has data-shape; contract names below)
-1. hero      data-shape="face"   text left, shape right
-2. autopilot data-shape="india"  text right, shape left
-3. lens      data-shape="lens"   text left, shape right
-4. f1        data-shape="f1"     text right, shape left
-5. contact   data-shape="dust"   text centred
+## Sections
+Seven sections in this exact order, with alternating text sides:
+1. hero      data-shape="face"      text left
+2. location  data-shape="india"     text right
+3. autopilot data-shape="tower"     text left
+4. lens      data-shape="lens"      text right
+5. sentiment data-shape="bubble"    text left
+6. analyzer  data-shape="f1"        text right
+7. contact   data-shape="dust"     text centred, drawn infinity above text
 
-Heights: hero 120vh, project sections 110vh, contact 100vh.
-Mobile: text sits in the bottom third so the shape stays visible.
+Hero is 120vh, content sections are 110vh, and contact is at least 100vh.
+Contact stacks a drawn infinity, label, paragraph, and links in the centre.
+The dust particle field stays behind the content and dims to 60% opacity there.
 
 ## Content (use verbatim, do not invent facts)
 
 ### Hero
-- Label (small, uppercase): GARV KAPOOR
-- Headline: AI/ML engineer in training.
+- Headline: GARV KAPOOR
+- Role: AI/ML engineer in training.
 - Line: I build with Python and real data: live APIs, pre-trained models,
   and agents that have to work under hard limits.
 - Status: green dot + "Open to internships"
 
-### Project 01: AutoPilot
+### Location
+- Label: LOCATION
+- Title: Based in India.
+- Text: Noida, in the Delhi NCR.
+
+### AutoPilot
 - Label: PROJECT 01 / NSUT HACKATHON
 - Title: AutoPilot
 - Badge line: Top 5 overall
@@ -47,10 +55,9 @@ Mobile: text sits in the bottom third so the shape stays visible.
   four public test cases, and was refined by reading run logs to find where
   defences were lost and budget was wasted.
 - Tags: Python, standard library only
-- Link: "View on GitHub" -> https://github.com/jordan270 (placeholder until
-  the AutoPilot repo URL is known)
+- Link: "View on GitHub" -> https://github.com/jordan270
 
-### Project 02: RhetoricLens
+### Lens
 - Label: PROJECT 02 / JAI 2026 HACKATHON, JIIT NOIDA
 - Title: RhetoricLens
 - Text: A web app, built with a team and still in progress, that analyses
@@ -60,18 +67,23 @@ Mobile: text sits in the bottom third so the shape stays visible.
 - Tags: Python, FastAPI, HTML/CSS/JS
 - Link: "View on GitHub" -> https://github.com/Adhyan0112/Rhetoric-lenss
 
-### Project 03: F1 projects
+### Sentiment
 - Label: PROJECT 03 / FORMULA 1
-- Title: F1 Race Sentiment Tracker and Race Analyzer
-- Text: Two Formula 1 projects. The Sentiment Tracker scores fan reactions
-  with a pre-trained HuggingFace model, and documents where it fails
-  (sarcasm like "oh great, another red flag" scores positive). The Race
-  Analyzer, my Harvard CS50P final project, fetches live race data from the
+- Title: Race Sentiment Tracker
+- Text: The Sentiment Tracker scores fan reactions with a pre-trained
+  HuggingFace model, and documents where it fails (sarcasm like “oh great,
+  another red flag” scores positive).
+- Tags: Python, HuggingFace Transformers
+- Link: "Sentiment Tracker" -> https://github.com/jordan270/projects
+
+### Analyzer
+- Label: PROJECT 03 / FORMULA 1
+- Title: Race Analyzer
+- Text: My Harvard CS50P final project fetches live race data from the
   Jolpica API, computes each driver's fastest lap, shows pit-stop strategies,
   and is covered by pytest.
-- Tags: Python, HuggingFace Transformers, REST APIs, pytest
-- Links: "Sentiment Tracker" -> https://github.com/jordan270/projects
-         "Race Analyzer"     -> https://github.com/jordan270
+- Tags: Python, REST APIs, pytest
+- Link: "Race Analyzer" -> https://github.com/jordan270
 
 ### Contact
 - Line: Looking for an AI/ML internship where I can ship quickly and learn
@@ -80,30 +92,37 @@ Mobile: text sits in the bottom third so the shape stays visible.
   https://github.com/jordan270, LinkedIn
   https://www.linkedin.com/in/garv-kapoor-a13804433, Kaggle
   https://www.kaggle.com/garvkapoor24
+- Label above contact copy: KEEP IN TOUCH
 - Small footer: Harvard CS50P (completed 2026) / CS50 AI (in progress).
-- NEVER show a phone number or age anywhere on the site.
+- NEVER show a phone number, street address, or age anywhere on the site.
 
 ## Shapes (public names)
-export type ShapeName = 'face' | 'india' | 'lens' | 'f1' | 'dust';
+```ts
+export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
+```
+- `dust`: a sparse, wide, slowly drifting background field; it fills the
+  viewport without a figure and dims to 60% opacity on the contact slide.
+- `face`: baked photo-derived 3D point cloud, hologram effects only while face
+  is dominant.
+- `india`: official India outline from `public/shapes/india.svg`, with a bright
+  Delhi NCR cluster and a subtle pulsing ring while india is dominant.
+- `tower`: tall castle-style defence tower with eight spaced merlons, sparse
+  slit windows, and two concentric ground range rings.
+- `lens`: magnifying glass (torus rim, sparse glass disc, highlight arc, and
+  handle at about 45 degrees).
+- `bubble`: speech-bubble silhouette made of particles.
+- `f1`: sampled Formula 1 logo silhouette with slight z jitter.
 
-- face: baked 3D point cloud of the owner's face, hologram look (scanlines,
-  faint flicker, slow vertical scan band) active only while face is dominant
-- india: a tall castle-style defence tower with crenellated top, with two
-  thin concentric range rings on the ground plane around it
-- lens: magnifying glass (torus rim, sparse glass disc with a bright
-  highlight arc, handle at about 45 degrees)
-- f1: sampled from assets/f1.svg silhouette with slight z jitter
-- dust: loose, wide, flat drifting field of sparse particles
-
-## Folder ownership (DO NOT edit the other agent's folders)
-- CODEX owns: src/engine/**, scripts/**, public/shapes/**, .gitignore
-- ANTIGRAVITY owns: index.html, src/style.css, src/ui/**, src/main.ts
+## Folder ownership
+- Engine and shape sampling: `src/engine/**`, `scripts/**`, `public/shapes/**`,
+  `.gitignore`
+- UI: `index.html`, `src/style.css`, `src/ui/**`, `src/main.ts`
 
 ## Contract (public API of src/engine)
 ```ts
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
-  setMorph(from: ShapeName, to: ShapeName, t: number): void; // t 0..1
+  setMorph(from: ShapeName, to: ShapeName, t: number); // t 0..1
   setEnergy(value: number): void;
   setQuality(q: 'high' | 'medium' | 'low' | 'auto'): void;
   resize(): void;
@@ -111,8 +130,8 @@ export interface ParticleEngine {
 }
 export function createEngine(opts?: { count?: number }): ParticleEngine;
 ```
-The UI must only use this API. The engine must not touch the DOM outside
-its container.
+The UI uses only this API. The engine does not touch the DOM outside its
+container.
 
 ## Performance
 - Adaptive quality (high 60k, medium 30k, low 12k particles)

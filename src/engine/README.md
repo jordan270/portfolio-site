@@ -1,13 +1,14 @@
 # Particle engine
 
-`createEngine(opts?)` mounts one additive particle cloud. `setMorph(from, to, t)` blends between shapes using stable per-particle seeds; `setEnergy`, `setQuality`, `resize`, and `dispose` control motion, adaptive particle count, viewport sizing, and cleanup. The exported `ShapeName` is exactly `'face' | 'india' | 'lens' | 'f1' | 'dust'`. The engine accepts the old UI labels as temporary aliases (`sphere`→`face`, `map`→`india`, `helix`→`lens`, `galaxy`→`dust`) so existing callers keep working without changing UI-owned files.
+`createEngine(opts?)` mounts one additive particle cloud. `setMorph(from, to, t)` blends between shapes using stable per-particle seeds; `setEnergy`, `setQuality`, `resize`, and `dispose` control motion, adaptive particle count, viewport sizing, and cleanup. The exported `ShapeName` is exactly `'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust'`. The engine accepts the old UI labels as temporary aliases (`sphere`→`face`, `map`→`india`, `helix`→`lens`, `galaxy`→`dust`) so existing callers keep working without changing UI-owned files.
 
 ## Shapes
 
 - `india`: samples the supplied `public/shapes/india.svg` mask, emphasizing the outline and a small Delhi NCR particle cluster. If the asset is absent it warns and uses dust.
 - `lens`: thin torus, sparse glass, upper-left highlight arc, and a 45° handle.
 - `f1`: samples the alpha silhouette from `/assets/f1.svg` using an offscreen canvas. If that file is absent or invalid, it warns and uses a built-in racing-mark placeholder.
-- `dust`: wide, flat field with low-frequency density variation.
+- `dust`: sparse, wide background field that fills the viewport, drifts slowly,
+  and dims to 60% alpha when it is the target shape.
 - `face`: samples the photo-derived `public/shapes/face.bin`. If the binary is absent it warns and uses dust. Scanlines, faint flicker, a slow vertical highlight band, and a faint base ring are weighted by the face morph value and fade out across adjacent transitions.
 
 All shape arrays have one point per particle. Their sample order is driven by the geometry's persistent `aSeed` values, so a particle keeps its identity as it moves between distributions.
@@ -29,4 +30,9 @@ Auto quality starts at 60,000 particles (30,000 on mobile or lower-memory/CPU de
 
 Point size uses `4.5 / viewDepth`, DPR scaling, and hard clamps: normal dots 1–3 device pixels, with 3% of particles allowed up to 5px. Per-particle alpha is capped at 0.5. The fragment shader clips to a circle and applies a soft falloff. The renderer clears to `#26262b`.
 
-Open `/src/engine/demo.html` through Vite to step through all five shapes and tune size/alpha. Run `node scripts/check-render.mjs` to capture demo frames for every shape, check main-page frames, pixel coverage/saturation, animation delta, and browser errors. Render artifacts are saved under ignored `debug/`.
+The contact infinity is an inline SVG line drawn by `src/ui/infinity.ts`, not a
+particle shape. Open `/src/engine/demo.html` through Vite to step through the
+particle shapes and tune size/alpha. Run `node scripts/check-render.mjs` to
+capture demo frames, check main-page layouts and contact animation, pixel
+coverage/saturation, and browser errors. Render artifacts are saved under
+ignored `debug/`.

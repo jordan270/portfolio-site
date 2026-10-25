@@ -1,6 +1,6 @@
 import { createEngine, type ShapeName } from './index.ts';
 
-const names: ShapeName[] = ['face', 'india', 'lens', 'f1', 'dust'];
+const names: ShapeName[] = ['face', 'india', 'tower', 'lens', 'bubble', 'f1', 'dust'];
 const root = document.querySelector<HTMLElement>('#demo');
 const slider = document.querySelector<HTMLInputElement>('#shape-step');
 const label = document.querySelector<HTMLElement>('#shape-name');

@@ -81,16 +81,22 @@ export function initReveal(): RevealController {
   blocks.forEach((block) => {
     const textEls = Array.from(block.querySelectorAll<HTMLElement>('.reveal-text'));
     const allLines: HTMLElement[] = [];
+    const wholeBlocks: HTMLElement[] = [];
 
     textEls.forEach((el) => {
+      if (el.closest('.section--contact')) {
+        wholeBlocks.push(el);
+        return;
+      }
       const lines = splitElementIntoLines(el);
       allLines.push(...lines);
     });
 
-    if (allLines.length === 0) return;
+    if (allLines.length === 0 && wholeBlocks.length === 0) return;
 
     if (prefersReduced) {
       gsap.set(allLines, { opacity: 1, y: 0 });
+      gsap.set(wholeBlocks, { opacity: 1, y: 0 });
       return;
     }
 
@@ -99,6 +105,7 @@ export function initReveal(): RevealController {
       opacity: 0,
       y: 22,
     });
+    gsap.set(wholeBlocks, { opacity: 0, y: 16 });
 
     const trigger = ScrollTrigger.create({
       trigger: block,
@@ -106,6 +113,13 @@ export function initReveal(): RevealController {
       once: true,
       onEnter: () => {
         gsap.to(allLines, {
+          y: 0,
+          opacity: 1,
+          duration: 0.85,
+          stagger: 0.08,
+          ease: 'power2.out',
+        });
+        gsap.to(wholeBlocks, {
           y: 0,
           opacity: 1,
           duration: 0.85,

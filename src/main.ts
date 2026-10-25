@@ -11,6 +11,7 @@ import { createEngineStub, type ParticleEngine } from './ui/engineStub';
 import { initScroll } from './ui/scroll';
 import { initComet } from './ui/comet';
 import { initReveal } from './ui/reveal';
+import { initInfinity } from './ui/infinity';
 
 function initApp(): void {
   const stage = document.getElementById('stage');
@@ -42,7 +43,8 @@ function initApp(): void {
   // 5. Initialize Comet 2D canvas overlay
   initComet('#comet-canvas');
 
-  // 6. Initialize per-line text reveals
+  // 6. Initialize the contact illustration and text reveals
+  initInfinity();
   initReveal();
 
   // 7. Initialize Lenis + GSAP ScrollTrigger morph syncing
