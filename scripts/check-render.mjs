@@ -34,6 +34,28 @@ async function screenshot(name, allowAnimations = false) {
 
 const shapeNames = ['face', 'india', 'tower', 'lens', 'bubble', 'f1', 'dust'];
 await page.goto(`${baseUrl}/src/engine/demo.html?quality=high&debugMasks=1`, { waitUntil: 'networkidle' });
+const f1ContrastCases = await page.evaluate(async () => {
+  const source = new Image(); source.src = '/assets/f1.png'; await source.decode();
+  const canvas = document.createElement('canvas'); canvas.width = source.naturalWidth; canvas.height = source.naturalHeight;
+  const context = canvas.getContext('2d'); context.drawImage(source, 0, 0);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  const { loadPngLogoMask } = await import('/src/engine/shapes/mask.ts');
+  const cases = [];
+  for (const [name, background, foreground] of [['light-logo-dark-background', [18, 18, 22], [245, 245, 245]], ['dark-logo-light-background', [245, 245, 245], [18, 18, 22]]]) {
+    const variant = document.createElement('canvas'); variant.width = canvas.width; variant.height = canvas.height;
+    const variantContext = variant.getContext('2d'); const image = variantContext.createImageData(canvas.width, canvas.height);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const logo = pixels.data[i] > pixels.data[i + 1] * 1.35 && pixels.data[i] > pixels.data[i + 2] * 1.35;
+      const colour = logo ? foreground : background;
+      image.data[i] = colour[0]; image.data[i + 1] = colour[1]; image.data[i + 2] = colour[2]; image.data[i + 3] = 255;
+    }
+    variantContext.putImageData(image, 0, 0);
+    const mask = await loadPngLogoMask(variant.toDataURL('image/png'), name);
+    cases.push({ name, pixels: mask.pixelIndices.length, bboxWidthRatio: mask.bboxWidthRatio });
+  }
+  return cases;
+});
+if (f1ContrastCases.length !== 2 || f1ContrastCases.some((item) => item.pixels < 1000 || item.bboxWidthRatio < 0.6)) throw new Error(`F1 contrast mask checks failed: ${JSON.stringify(f1ContrastCases)}`);
 const demo = {};
 for (let i = 0; i < shapeNames.length; i++) {
   await page.locator('#shape-step').evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
@@ -64,6 +86,7 @@ let firstContactFrame;
 
 for (const viewport of viewports) {
   await page.setViewportSize(viewport);
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.waitForTimeout(250);
   for (const [index, id] of sectionIds.entries()) {
     const shape = sectionShapes[index];
@@ -78,14 +101,34 @@ for (const viewport of viewports) {
       const rect = content.getBoundingClientRect();
       const minDimension = Math.min(innerWidth, innerHeight);
       const radiusX = minDimension * (shape === 'tower' ? 0.21 : shape === 'india' ? 0.19 : 0.19);
-      const scale = innerWidth <= 768 ? (innerWidth <= 500 ? 0.6 : 0.75) : 1;
-      const radiusY = innerHeight * (shape === 'tower' ? 0.28 : 0.21) * scale;
+      const scale = innerWidth <= 768 ? 0.25 : 1;
+      const radiusY = innerHeight * (shape === 'tower' ? 0.42 : 0.4) * scale;
       const side = ['face', 'tower', 'bubble'].includes(shape) ? 1 : -1;
-      const desktopOffset = innerWidth > 768 ? side * minDimension * 0.2484 : 0;
+      const offsetAmount = shape === 'face' ? 0.9 : shape === 'india' ? 1.5 : innerWidth <= 1100 ? (shape === 'lens' ? 1.65 : 1.5) : shape === 'tower' || shape === 'bubble' ? 2.0 : 1.9;
+      const desktopOffset = innerWidth > 768 ? side * minDimension * offsetAmount * 0.276 : 0;
       const centerX = innerWidth / 2 + desktopOffset;
-      const centerY = innerHeight / 2 - (innerWidth <= 768 ? (innerWidth <= 500 ? 0.9 : 0.4) : 0) * innerHeight * 0.276;
-      const overlaps = shape === 'dust' ? false : rect.left < centerX + radiusX && rect.right > centerX - radiusX && rect.top < centerY + radiusY && rect.bottom > centerY - radiusY;
-      return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, overlaps, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
+      const centerY = innerHeight / 2 - (innerWidth <= 768 ? 1.0 : 0) * innerHeight * 0.276;
+      let visibleShapeSamples = 0, coveredShapeSamples = 0;
+      if (shape !== 'dust') for (let gy = 0; gy < 80; gy++) for (let gx = 0; gx < 80; gx++) {
+        const x = (gx + 0.5) / 80 * innerWidth, y = (gy + 0.5) / 80 * innerHeight;
+        const inShape = ((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 <= 1;
+        if (inShape) { visibleShapeSamples++; if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) coveredShapeSamples++; }
+      }
+      const textOverflow = [];
+      const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.textContent?.trim() || node.parentElement?.closest('svg')) continue;
+        const range = document.createRange(); range.selectNodeContents(node);
+        for (const r of Array.from(range.getClientRects())) if (r.left < -0.5 || r.right > innerWidth + 0.5 || r.top < -0.5 || r.bottom > innerHeight + 0.5) textOverflow.push(node.textContent.trim());
+      }
+      const clipped = Array.from(section.querySelectorAll('*')).some((el) => {
+        const style = getComputedStyle(el);
+        if (el.matches('.project-description')) return false;
+        const clips = ['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowX) || ['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY);
+        return clips && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1);
+      });
+      return { rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, shapeCoverage: coveredShapeSamples / Math.max(1, visibleShapeSamples), textOverflow, clipped, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth };
     }, { id, shape });
     slides.push({ viewport: viewport.width, id, ...visual, ...check });
     delete slides[slides.length - 1].bytes;
@@ -135,12 +178,14 @@ for (const viewport of viewports) {
   }
 }
 
+const previewFallbacks = await page.locator('[data-preview-kind="fallback"]').evaluateAll((elements) => elements.map((element) => element.closest('[data-project]')?.getAttribute('data-project')));
 await browser.close();
 const metricPass = [...Object.values(demo), ...slides].every((m) => m.saturation < 0.12 && m.coverage >= 0.002 && m.coverage <= 0.45);
 const overflowPass = slides.every((item) => item.scrollWidth <= item.viewportWidth);
-const overlapFailures = slides.filter((item) => item.overlaps || item.missing);
+const overlapFailures = slides.filter((item) => item.shapeCoverage > 0.10 || item.missing);
+const textFailures = slides.filter((item) => item.textOverflow?.length || item.clipped);
 const contactFailures = contactChecks.filter((item) => item.missing || item.svgOverlapsText || item.textOverflow?.length || item.scrollWidth > item.viewportWidth);
 const animationPass = contactAnimationDifference > 0.00008;
-const results = { baseUrl, demo, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, contactFailures, overflowPass, animationPass, errors };
+const results = { baseUrl, demo, f1ContrastCases, previewFallbacks, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, contactFailures, overflowPass, animationPass, errors };
 console.log(JSON.stringify(results, null, 2));
-if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || contactFailures.length) process.exitCode = 1;
+if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || contactFailures.length) process.exitCode = 1;

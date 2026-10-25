@@ -143,8 +143,73 @@ html.lenis, html.lenis body {
 .section--location,
 .section--lens,
 .section--analyzer { padding-right: 6vw; }
+@media (min-width: 769px) and (max-width: 1100px) {
+  .section--lens { padding-right: 0; }
+}
+@media (min-width: 1101px) {
+  .section--lens { padding-right: 4vw; }
+}
 .section--autopilot,
 .section--sentiment { padding-left: 6vw; }
+
+.section--autopilot .content-block,
+.section--lens .content-block,
+.section--sentiment .content-block,
+.section--analyzer .content-block {
+  width: min(60vw, 58rem);
+  max-width: min(60vw, 58rem);
+}
+
+.work-kicker {
+  position: absolute;
+  top: 7vh;
+  left: 6vw;
+  z-index: 2;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.project-card { width: 100%; }
+.project-preview-link { display: block; color: inherit; text-decoration: none; outline-offset: 5px; }
+.project-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: #17171b;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  transition: transform 400ms ease;
+}
+.project-media img, .project-media video { width: 100%; height: 100%; display: block; object-fit: cover; }
+.preview-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  text-align: left;
+}
+.preview-title { color: rgba(255,255,255,.92); font-size: clamp(1.5rem, 4vw, 3.5rem); line-height: 1.05; }
+.preview-tags { margin-top: 0.85rem; color: var(--text-dim); font-size: clamp(.6rem, 1vw, .8rem); letter-spacing: .12em; text-transform: uppercase; }
+.preview-fact { margin-top: .75rem; color: rgba(255,255,255,.75); font-size: clamp(.75rem, 1.4vw, 1rem); }
+.project-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-top: .8rem; }
+.project-title-row h2 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: 400; }
+.project-year { flex: none; color: var(--text-dim); font-size: 1rem; }
+.project-description { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin-top: .45rem; font-size: clamp(.92rem, 1.25vw, 1rem); line-height: 1.4; }
+.project-label, .project-tags { margin-top: .45rem; color: var(--text-dim); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
+.project-links { margin-top: .65rem; font-size: .9rem; }
+.project-links .quiet-link { font-size: .9rem; }
+@media (hover: hover) and (pointer: fine) {
+  .project-preview-link:hover .project-media { transform: scale(1.02); }
+  .project-title-row h2 { transition: color 400ms ease; }
+  .project-card:has(.project-preview-link:hover) .project-title-row h2 { color: rgba(255,255,255,.82); }
+}
+.project-preview-link:focus-visible, .project-links a:focus-visible { outline: 2px solid #fff; }
 
 /* Content stays in a bounded column so it cannot cover the hologram. */
 .content-block {
@@ -155,8 +220,8 @@ html.lenis, html.lenis body {
 }
 
 .section--hero .content-block {
-  width: min(34rem, 38vw);
-  max-width: min(34rem, 38vw);
+  width: min(32rem, 46vw);
+  max-width: min(32rem, 46vw);
 }
 
 .section--contact .content-block {
@@ -236,11 +301,14 @@ p {
   line-height: 1.38;
   font-weight: 300;
   color: var(--text-muted);
+  text-wrap: pretty;
 }
 
+h1, h2, .hero-role { text-wrap: balance; }
+
 .contact-lead {
-  width: min(36rem, 88vw);
-  max-width: calc(100vw - 12vw);
+  width: auto;
+  max-width: min(36rem, 88vw);
   text-align: center;
   text-wrap: balance;
   font-size: clamp(1.1rem, 1.6vw, 1.5rem);
@@ -459,18 +527,6 @@ a:focus-visible {
   margin: 0 auto;
 }
 
-/* Text reveal wrapper lines */
-.reveal-line-wrap {
-  display: block;
-  overflow: hidden;
-  padding-bottom: 0.08em;
-}
-
-.reveal-line {
-  display: inline-block;
-  will-change: transform, opacity;
-}
-
 /* ==========================================================================
    Mobile Responsiveness (down to 360px)
    "On mobile, text sits in the bottom third so the shape stays visible."
@@ -484,7 +540,7 @@ a:focus-visible {
 
   .section--hero {
     min-height: 120vh;
-    padding-bottom: 2rem;
+    align-items: center;
   }
 
   .section--hero .content-block {
@@ -497,7 +553,8 @@ a:focus-visible {
   .section--lens,
   .section--sentiment,
   .section--analyzer {
-    min-height: 110vh;
+    min-height: 100vh;
+    padding-bottom: 2rem;
   }
 
   .section--contact {
@@ -525,7 +582,17 @@ a:focus-visible {
 
   .section--location .content-block,
   .section--lens .content-block,
-  .section--analyzer .content-block { margin-left: 0; }
+  .section--analyzer .content-block,
+  .section--autopilot .content-block,
+  .section--sentiment .content-block { margin-left: 0; }
+
+  .section--autopilot .content-block,
+  .section--lens .content-block,
+  .section--sentiment .content-block,
+  .section--analyzer .content-block { width: 100%; max-width: 100%; }
+
+  .work-kicker { top: 2.5vh; }
+  .project-description { font-size: .9rem; }
 
 
   .text-right .links-inline {
@@ -552,6 +619,8 @@ a:focus-visible {
   .contact-infinity {
     width: 80vw;
   }
+
+  .contact-links > a:not(:first-child)::before { display: none; }
 
   .cs50-footer {
     margin-top: 2.5rem;

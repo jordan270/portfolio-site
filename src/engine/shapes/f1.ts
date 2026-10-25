@@ -1,4 +1,4 @@
-import { loadRasterMask, loadSvgMask, sampleSvgMask, type SampledMask } from './mask.ts';
+import { loadPngLogoMask, loadSvgMask, sampleSvgMask, type SampledMask } from './mask.ts';
 import { generate as dust } from './dust.ts';
 
 let sampledMask: SampledMask | null = null;
@@ -12,9 +12,7 @@ export function loadSource(): Promise<void> {
       } catch (svgError) {
         console.warn('[ParticleEngine] assets/f1.svg unavailable; sampling the supplied F1 PNG.', svgError);
         try {
-          sampledMask = await loadRasterMask('/src/assets/f1.png', 'f1', (rgba, offset) =>
-            rgba[offset + 3] > 25.5 && rgba[offset] > rgba[offset + 1] * 1.35 && rgba[offset] > rgba[offset + 2] * 1.35,
-          );
+          sampledMask = await loadPngLogoMask('/assets/f1.png', 'f1');
         } catch (pngError) {
           console.warn('[ParticleEngine] F1 image masks unavailable; using dust.', pngError);
         }

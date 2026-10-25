@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -9,13 +9,11 @@ import { PNG } from 'pngjs';
 import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const photoPath = path.resolve(process.argv[2] ?? path.join(root, 'private', 'face.jpg'));
+const photoPath = await findPhoto(process.argv[2]);
 const outPath = path.join(root, 'public', 'shapes', 'face.bin');
 const previewPath = path.join(root, 'debug', 'face-preview.png');
 const modelName = 'onnx-community/depth-anything-v2-small-ONNX';
-if (!existsSync(photoPath)) {
-  throw new Error(`Photo not found at ${photoPath}. Put it at private/face.jpg, or pass a photo path: node scripts/build-face.mjs <path>`);
-}
+if (!photoPath || !existsSync(photoPath)) throw new Error(`Photo not found in ${path.join(root, 'private')}. Accepted files, checked in order: face.jpg, face.jpeg, face.png.`);
 
 let pipeline;
 try {
@@ -24,7 +22,7 @@ try {
   throw new Error(`Depth-estimation package is missing. Install it with: npm install --no-save --package-lock=false @imgly/background-removal-node @huggingface/transformers\n${String(error)}`);
 }
 
-console.log(`Reading photo: ${photoPath}`);
+console.log(`Using photo: ${path.relative(root, photoPath)}`);
 const cutoutPath = path.join(tmpdir(), `particle-face-cutout-${randomUUID()}.png`);
 try {
   const helper = path.join(root, 'scripts', 'remove-face-background.mjs');
@@ -76,7 +74,8 @@ const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] }
 let sourcePng;
 try {
   const page = await browser.newPage();
-  const dataUrl = `data:image/jpeg;base64,${sourcePhoto.toString('base64')}`;
+  const mime = path.extname(photoPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+  const dataUrl = `data:${mime};base64,${sourcePhoto.toString('base64')}`;
   await page.setContent(`<img id="photo" src="${dataUrl}">`);
   const decoded = await page.evaluate(async () => {
     const image = document.querySelector('#photo');
@@ -172,25 +171,51 @@ for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
 if (maxX < minX || maxY < minY) throw new Error('Background removal returned an empty person mask.');
 const personHeight = maxY - minY + 1;
 const centerX = (minX + maxX) / 2;
-const candidates = [], cumulative = [];
-let totalWeight = 0;
+// Approximate head bounds from the upper mask rows. The face oval is centered
+// in that head; all remaining head pixels and its silhouette go to HAIR.
+const rowWidths = [];
+for (let y = minY; y <= Math.min(maxY, minY + personHeight * 0.42); y++) {
+  let left = width, right = -1;
+  for (let x = minX; x <= maxX; x++) if (alpha[y * width + x] > 25) { left = Math.min(left, x); right = Math.max(right, x); }
+  if (right >= left) rowWidths.push({ y, left, right, width: right - left + 1 });
+}
+const headRows = rowWidths.filter((row) => row.y < minY + personHeight * 0.34);
+const headMinY = minY, headMaxY = Math.max(minY + 1, ...headRows.map((row) => row.y));
+const faceRows = headRows.filter((row) => row.y > minY + (headMaxY - minY) * 0.22 && row.y < minY + (headMaxY - minY) * 0.82);
+const headWidth = Math.max(2, ...faceRows.map((row) => row.width));
+const faceCenterY = minY + (headMaxY - minY) * 0.53;
+const faceRadiusX = headWidth * 0.39, faceRadiusY = (headMaxY - headMinY) * 0.35;
+const faceBottom = faceCenterY + faceRadiusY;
+
+// CLAHE-style tile equalization makes edges on softly lit skin measurable.
+const equalized = clahe(sourceLum, width, height);
+const blurred = gaussianBlur(sourceLum, width, height, 6);
+const facePixels = [], hairPixels = [], bodyPixels = [];
 for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
   const index = y * width + x;
   if (alpha[index] <= 25) continue;
+  const inFace = ((x - centerX) / faceRadiusX) ** 2 + ((y - faceCenterY) / faceRadiusY) ** 2 <= 1 && y <= faceBottom;
   const left = sourceLum[y * width + Math.max(0, x - 1)], right = sourceLum[y * width + Math.min(width - 1, x + 1)];
   const up = sourceLum[Math.max(0, y - 1) * width + x], down = sourceLum[Math.min(height - 1, y + 1) * width + x];
-  const contrast = (Math.abs(sourceLum[index] - left) + Math.abs(sourceLum[index] - right) + Math.abs(sourceLum[index] - up) + Math.abs(sourceLum[index] - down)) * 0.25;
-  const imageEdge = Math.min(1, Math.hypot(right - left, down - up) * 1.8);
-  const maskEdge = Math.min(1, Math.abs(alpha[index] - Math.min(alpha[y * width + Math.max(0, x - 1)], alpha[y * width + Math.min(width - 1, x + 1)], alpha[Math.max(0, y - 1) * width + x], alpha[Math.min(height - 1, y + 1) * width + x])) / 180);
+  const eqEdge = Math.min(1, Math.hypot(equalized[y * width + Math.min(width - 1, x + 1)] - equalized[y * width + Math.max(0, x - 1)], equalized[Math.min(height - 1, y + 1) * width + x] - equalized[Math.max(0, y - 1) * width + x]) * 2.2);
+  const smoothEdge = Math.min(1, Math.hypot(blurred[y * width + Math.min(width - 1, x + 1)] - blurred[y * width + Math.max(0, x - 1)], blurred[Math.min(height - 1, y + 1) * width + x] - blurred[Math.max(0, y - 1) * width + x]) * 3.4);
+  const maskEdge = Math.min(1, Math.abs(alpha[index] - Math.min(alpha[y * width + Math.max(0, x - 1)], alpha[y * width + Math.min(width - 1, x + 1)], alpha[Math.max(0, y - 1) * width + x], alpha[Math.min(height - 1, y + 1) * width + x])) / 150);
   const vertical = (y - minY) / personHeight;
-  const shoulderBottomFade = vertical > 0.62 ? 1 - 0.55 * smoothstep(0.62, 1, vertical) : 1;
-  const weight = (0.025 + contrast * 3.5 + imageEdge * 2.7 + maskEdge * 4.2) * (alpha[index] / 255) * shoulderBottomFade;
-  if (weight <= 0) continue;
-  totalWeight += weight;
-  candidates.push({ x, y, index });
-  cumulative.push(totalWeight);
+  const side = Math.abs((x - centerX) / Math.max(1, (maxX - minX) / 2));
+  const fade = 1 - smoothstep(0.72, 1, Math.max(vertical, side));
+  const aa = alpha[index] / 255;
+  if (inFace) facePixels.push({ x, y, index, weight: (0.65 + eqEdge * 3.5) * aa });
+  else if (y < faceBottom + personHeight * 0.025) hairPixels.push({ x, y, index, weight: (0.18 + eqEdge * 1.6 + maskEdge * 4) * aa });
+  else if (y > faceBottom) bodyPixels.push({ x, y, index, weight: Math.min(0.26, (0.03 + smoothEdge * 1.3 + maskEdge * 2.2) * aa) * fade });
 }
-if (candidates.length < 100 || !totalWeight) throw new Error('Person mask did not contain enough sampleable pixels.');
+if (facePixels.length < 100 || hairPixels.length < 50 || bodyPixels.length < 100) throw new Error('Person mask did not contain enough pixels for face, hair, and body regions.');
+
+function makeSampler(pixels, count) {
+  const cumulative = []; let total = 0;
+  for (const pixel of pixels) { total += pixel.weight; cumulative.push(total); }
+  return { pixels, cumulative, total, count };
+}
+const samplers = [makeSampler(facePixels, 20_250), makeSampler(hairPixels, 9_000), makeSampler(bodyPixels, 15_750)];
 
 let randomState = 0x4f1bbcdc;
 const random = () => {
@@ -199,19 +224,23 @@ const random = () => {
 };
 const pointCount = 45_000;
 const output = new Float32Array(pointCount * 3);
-for (let i = 0; i < pointCount; i++) {
-  const target = random() * totalWeight;
-  let low = 0, high = cumulative.length - 1;
-  while (low < high) { const mid = (low + high) >> 1; if (cumulative[mid] < target) low = mid + 1; else high = mid; }
-  const pixel = candidates[low];
-  const x = pixel.x + random() - 0.5;
-  const y = pixel.y + random() - 0.5;
-  const vertical = Math.max(0, Math.min(1, (y - minY) / personHeight));
-  const zFalloff = vertical > 0.58 ? 1 - 0.68 * smoothstep(0.58, 1, vertical) : 1;
-  const z = smoothDepth[pixel.index] - 0.5;
-  output[i * 3] = (x - centerX) / personHeight;
-  output[i * 3 + 1] = 0.5 - (y - minY) / personHeight;
-  output[i * 3 + 2] = z * 0.25 * zFalloff;
+let out = 0;
+for (const sampler of samplers) for (let n = 0; n < sampler.count; n++, out++) {
+  const target = random() * sampler.total;
+  let low = 0, high = sampler.cumulative.length - 1;
+  while (low < high) { const mid = (low + high) >> 1; if (sampler.cumulative[mid] < target) low = mid + 1; else high = mid; }
+  const pixel = sampler.pixels[low];
+  const x = pixel.x + random() - 0.5, y = pixel.y + random() - 0.5;
+  let z = smoothDepth[pixel.index] - 0.5;
+  if (sampler === samplers[0]) {
+    const nx = (x - centerX) / faceRadiusX, ny = (y - faceCenterY) / faceRadiusY;
+    const ridge = Math.exp(-((Math.abs(nx) - 0.34) ** 2 / 0.012 + (ny + 0.12) ** 2 / 0.018)) * 0.12;
+    const nose = Math.exp(-(nx ** 2 / 0.035 + (ny - 0.12) ** 2 / 0.06)) * 0.18;
+    z += ridge + nose;
+  }
+  output[out * 3] = (x - centerX) / personHeight;
+  output[out * 3 + 1] = 0.5 - (y - minY) / personHeight;
+  output[out * 3 + 2] = z * 0.25;
 }
 
 const preview = new PNG({ width: 1024, height: 1024 });
@@ -242,4 +271,45 @@ console.log(`Wrote front projection preview to debug/face-preview.png`);
 function smoothstep(edge0, edge1, value) {
   const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+async function findPhoto(argument) {
+  if (argument) return path.resolve(argument);
+  const dir = path.join(root, 'private');
+  if (!existsSync(dir)) return null;
+  const names = await readdir(dir);
+  const match = ['face.jpg', 'face.jpeg', 'face.png'].find((name) => names.includes(name));
+  return match ? path.join(dir, match) : null;
+}
+
+function clahe(input, w, h) {
+  const tilesX = 8, tilesY = 8, maps = [];
+  const tileW = Math.ceil(w / tilesX), tileH = Math.ceil(h / tilesY);
+  for (let ty = 0; ty < tilesY; ty++) for (let tx = 0; tx < tilesX; tx++) {
+    const hist = new Uint32Array(256); let n = 0;
+    for (let y = ty * tileH; y < Math.min(h, (ty + 1) * tileH); y++) for (let x = tx * tileW; x < Math.min(w, (tx + 1) * tileW); x++) { hist[Math.round(input[y * w + x] * 255)]++; n++; }
+    const limit = Math.max(1, Math.floor(n / 256 * 2)); let excess = 0;
+    for (let i = 0; i < 256; i++) if (hist[i] > limit) { excess += hist[i] - limit; hist[i] = limit; }
+    for (let i = 0; i < 256; i++) hist[i] += Math.floor(excess / 256);
+    const lut = new Float32Array(256); let sum = 0;
+    for (let i = 0; i < 256; i++) { sum += hist[i]; lut[i] = sum / Math.max(1, n); }
+    maps.push(lut);
+  }
+  const out = new Float32Array(input.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const tx = Math.min(tilesX - 1, Math.floor(x / tileW)), ty = Math.min(tilesY - 1, Math.floor(y / tileH));
+    out[y * w + x] = maps[ty * tilesX + tx][Math.round(input[y * w + x] * 255)];
+  }
+  return out;
+}
+
+function gaussianBlur(input, w, h, sigma) {
+  const radius = Math.ceil(sigma * 3), kernel = [];
+  let total = 0;
+  for (let i = -radius; i <= radius; i++) { const v = Math.exp(-(i * i) / (2 * sigma * sigma)); kernel.push(v); total += v; }
+  for (let i = 0; i < kernel.length; i++) kernel[i] /= total;
+  const temp = new Float32Array(input.length), out = new Float32Array(input.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = 0; for (let k = -radius; k <= radius; k++) v += input[y * w + Math.max(0, Math.min(w - 1, x + k))] * kernel[k + radius]; temp[y * w + x] = v; }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let v = 0; for (let k = -radius; k <= radius; k++) v += temp[Math.max(0, Math.min(h - 1, y + k)) * w + x] * kernel[k + radius]; out[y * w + x] = v; }
+  return out;
 }

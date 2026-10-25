@@ -8,7 +8,7 @@ export function generate(count: number, seeds?: Float32Array): Float32Array {
     const rand = randAt(i), slot = i / Math.max(1, count);
     let x = 0, y = 0, z = (rand() - 0.5) * 0.05;
     if (slot < 0.09) {
-      const r = slot < 0.045 ? 0.78 : 1.02;
+      const r = slot < 0.045 ? 0.64 : 0.80;
       const a = rand() * Math.PI * 2;
       x = Math.cos(a) * r; z += Math.sin(a) * r; y = -0.76;
     } else if (slot < 0.2) {

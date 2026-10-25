@@ -17,6 +17,8 @@ Flow: face -> india -> tower -> lens -> bubble -> f1 -> dust
   trail (desktop only)
 - No boxes, gradients, or UI chrome. Generous empty space.
 - Respect prefers-reduced-motion everywhere.
+- Paragraphs wrap naturally with `text-wrap: pretty`; titles and the hero role
+  line use balanced wrapping. Reveal animation keeps each text block intact.
 
 ## Sections
 Seven sections in this exact order, with alternating text sides:
@@ -28,7 +30,12 @@ Seven sections in this exact order, with alternating text sides:
 6. analyzer  data-shape="f1"        text right
 7. contact   data-shape="dust"     text centred, drawn infinity above text
 
-Hero is 120vh, content sections are 110vh, and contact is at least 100vh.
+Hero is 120vh, project sections are 110vh on desktop and 100vh on small
+screens, and contact is at least 100vh. The four project sections are cards
+with a 16:9 preview, title and 2026 year row, short description, tags, and
+links. Preview files come from `assets/projects/`; if none exists, show a
+typographic fallback with the project title, tags, and specified key fact.
+Videos play only while visible and when reduced motion is off.
 Contact stacks a drawn infinity, label, paragraph, and links in the centre.
 The dust particle field stays behind the content and dims to 60% opacity there.
 
@@ -47,41 +54,34 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - Text: Noida, in the Delhi NCR.
 
 ### AutoPilot
-- Label: PROJECT 01 / NSUT HACKATHON
+- Label: NSUT Hackathon / Top 5 overall
 - Title: AutoPilot
-- Badge line: Top 5 overall
-- Text: A rule-based tower-defence agent in pure Python. It deploys defences
-  under budget limits inside a 15-second per-call limit, scored 357.78 across
-  four public test cases, and was refined by reading run logs to find where
-  defences were lost and budget was wasted.
-- Tags: Python, standard library only
+- Text: A rule-based tower-defence agent in pure Python, scoring 357.78 across
+  four public test cases.
+- Tags: Python
 - Link: "View on GitHub" -> https://github.com/jordan270
 
 ### Lens
-- Label: PROJECT 02 / JAI 2026 HACKATHON, JIIT NOIDA
+- Label: JAI 2026 Hackathon
 - Title: RhetoricLens
-- Text: A web app, built with a team and still in progress, that analyses
-  arguments for logical fallacies and shows the structure behind them. I
-  worked on UI consistency between the landing page and the analysis console,
-  and on performance for low-end devices.
+- Text: A team-built web app that analyses arguments for logical fallacies. I
+  worked on UI consistency and low-end device performance.
 - Tags: Python, FastAPI, HTML/CSS/JS
 - Link: "View on GitHub" -> https://github.com/Adhyan0112/Rhetoric-lenss
 
 ### Sentiment
-- Label: PROJECT 03 / FORMULA 1
-- Title: Race Sentiment Tracker
-- Text: The Sentiment Tracker scores fan reactions with a pre-trained
-  HuggingFace model, and documents where it fails (sarcasm like “oh great,
-  another red flag” scores positive).
-- Tags: Python, HuggingFace Transformers
+- Label: Formula 1
+- Title: F1 Race Sentiment Tracker
+- Text: Scores fan reactions to F1 races with a pre-trained HuggingFace model,
+  and documents where it fails on sarcasm.
+- Tags: Python, HuggingFace, uv
 - Link: "Sentiment Tracker" -> https://github.com/jordan270/projects
 
 ### Analyzer
-- Label: PROJECT 03 / FORMULA 1
-- Title: Race Analyzer
-- Text: My Harvard CS50P final project fetches live race data from the
-  Jolpica API, computes each driver's fastest lap, shows pit-stop strategies,
-  and is covered by pytest.
+- Label: Harvard CS50P final project
+- Title: F1 Race Analyzer
+- Text: Pulls live race data from the Jolpica API, with fastest laps and
+  pit-stop strategies, covered by pytest.
 - Tags: Python, REST APIs, pytest
 - Link: "Race Analyzer" -> https://github.com/jordan270
 
@@ -95,16 +95,16 @@ The dust particle field stays behind the content and dims to 60% opacity there.
 - Label above contact copy: KEEP IN TOUCH
 - Small footer: Harvard CS50P (completed 2026) / CS50 AI (in progress).
 - NEVER show a phone number, street address, or age anywhere on the site.
-
 ## Shapes (public names)
 ```ts
 export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 'dust';
 ```
 - `dust`: a sparse, wide, slowly drifting background field; it fills the
   viewport without a figure and dims to 60% opacity on the contact slide.
-- `face`: baked photo-derived 3D point cloud, hologram effects only while face
-  is dominant.
-- `india`: official India outline from `public/shapes/india.svg`, with a bright
+- `face`: baked 45,000-point photo-derived cloud split 45% face, 20% hair and
+  35% body. Face detail leads over softened clothing texture; the desktop
+  bust fills about 80% of viewport height, with a soft side and lower fade.
+- `india`: official India outline from `assets/india.svg`, with a bright
   Delhi NCR cluster and a subtle pulsing ring while india is dominant.
 - `tower`: tall castle-style defence tower with eight spaced merlons, sparse
   slit windows, and two concentric ground range rings.
@@ -112,6 +112,17 @@ export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'bubble' | 'f1' | 
   handle at about 45 degrees).
 - `bubble`: speech-bubble silhouette made of particles.
 - `f1`: sampled Formula 1 logo silhouette with slight z jitter.
+
+Project-card alternation: AutoPilot and sentiment are on the left; Lens and
+Analyzer are on the right. On small screens, cards use the lower part of the
+viewport while their shapes sit above.
+
+Raster shape sources live under `assets/`; the private portrait source lives
+at `private/face.jpg` and is ignored by Git. PNG logos use alpha when more
+than 2% of pixels are near transparent; otherwise their four corners define
+the background colour and the foreground mask is cleaned before sampling.
+F1 sampling prefers `assets/f1.svg` when present and falls back to
+`assets/f1.png`.
 
 ## Folder ownership
 - Engine and shape sampling: `src/engine/**`, `scripts/**`, `public/shapes/**`,

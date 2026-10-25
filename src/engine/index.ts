@@ -224,12 +224,22 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const layoutOffsetX = (shape: ShapeName) => {
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) return 0;
     if (shape === 'dust') return 0;
-    return shape === 'face' || shape === 'tower' || shape === 'bubble' ? 0.9 : -0.9;
+    if (typeof window !== 'undefined' && window.innerWidth <= 1100) {
+      if (shape === 'face') return 0.9;
+      if (shape === 'india') return -1.5;
+      if (shape === 'tower' || shape === 'bubble') return 1.5;
+      if (shape === 'lens') return -1.65;
+      return -1.5;
+    }
+    if (shape === 'face') return 0.9;
+    if (shape === 'india') return -1.5;
+    if (shape === 'tower' || shape === 'bubble') return 2.0;
+    return shape === 'lens' ? -1.9 : -2.0;
   };
   const layoutOffsetY = () => {
     if (typeof window === 'undefined') return 0;
     const width = window.innerWidth;
-    if (width <= 768) return width <= 500 ? 0.9 : 0.4;
+    if (width <= 768) return 1.0;
     return 0;
   };
   const updateLayoutOffsets = () => {
@@ -238,7 +248,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     material.uniforms.uOffsetTo.value = layoutOffsetX(toName);
     material.uniforms.uOffsetYFrom.value = layoutOffsetY();
     material.uniforms.uOffsetYTo.value = layoutOffsetY();
-    const smallScale = typeof window !== 'undefined' && window.innerWidth <= 768 ? (window.innerWidth <= 500 ? 0.6 : 0.75) : 1;
+    const smallScale = typeof window !== 'undefined' && window.innerWidth <= 768 ? 0.25 : 1;
     const morph = material.uniforms.uMorph.value as number;
     material.uniforms.uShapeScale.value = ((fromName === 'dust' && morph < 0.5) || (toName === 'dust' && morph >= 0.5)) ? 1 : smallScale;
   };

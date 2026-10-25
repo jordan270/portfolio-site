@@ -7,72 +7,7 @@ export interface RevealController {
   destroy: () => void;
 }
 
-/**
- * Splits the text content of an element into visual lines based on word offsetTop.
- * No paid plugins required.
- */
-function splitElementIntoLines(element: HTMLElement): HTMLElement[] {
-  const originalText = element.textContent?.trim() || '';
-  if (!originalText) return [];
-
-  const words = originalText.split(/\s+/);
-  element.innerHTML = '';
-
-  // Wrap each word in a temporary inline-block span to measure line breaks
-  const wordSpans: HTMLSpanElement[] = words.map((word, idx) => {
-    const span = document.createElement('span');
-    span.textContent = idx < words.length - 1 ? word + ' ' : word;
-    span.style.display = 'inline-block';
-    element.appendChild(span);
-    return span;
-  });
-
-  // Group words into lines by comparing offsetTop
-  const linesMap: HTMLSpanElement[][] = [];
-  let currentLine: HTMLSpanElement[] = [];
-  let lastTop: number | null = null;
-
-  wordSpans.forEach((span) => {
-    const top = span.offsetTop;
-    if (lastTop === null || Math.abs(top - lastTop) > 4) {
-      if (currentLine.length > 0) {
-        linesMap.push(currentLine);
-      }
-      currentLine = [span];
-      lastTop = top;
-    } else {
-      currentLine.push(span);
-    }
-  });
-
-  if (currentLine.length > 0) {
-    linesMap.push(currentLine);
-  }
-
-  // Rebuild the element DOM with line wrappers
-  element.innerHTML = '';
-  const lineInnerElements: HTMLElement[] = [];
-
-  linesMap.forEach((lineWords) => {
-    const lineWrap = document.createElement('span');
-    lineWrap.className = 'reveal-line-wrap';
-    lineWrap.style.display = 'block';
-    lineWrap.style.overflow = 'hidden';
-
-    const lineInner = document.createElement('span');
-    lineInner.className = 'reveal-line';
-    lineInner.style.display = 'inline-block';
-    lineInner.style.willChange = 'transform, opacity';
-    lineInner.textContent = lineWords.map((w) => w.textContent).join('');
-
-    lineWrap.appendChild(lineInner);
-    element.appendChild(lineWrap);
-    lineInnerElements.push(lineInner);
-  });
-
-  return lineInnerElements;
-}
-
+/** Reveal each text block as a whole so the browser can wrap its text naturally. */
 export function initReveal(): RevealController {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const blocks = Array.from(document.querySelectorAll<HTMLElement>('.content-block'));
@@ -80,62 +15,28 @@ export function initReveal(): RevealController {
 
   blocks.forEach((block) => {
     const textEls = Array.from(block.querySelectorAll<HTMLElement>('.reveal-text'));
-    const allLines: HTMLElement[] = [];
-    const wholeBlocks: HTMLElement[] = [];
-
-    textEls.forEach((el) => {
-      if (el.closest('.section--contact')) {
-        wholeBlocks.push(el);
-        return;
-      }
-      const lines = splitElementIntoLines(el);
-      allLines.push(...lines);
-    });
-
-    if (allLines.length === 0 && wholeBlocks.length === 0) return;
-
+    const wholeBlocks = Array.from(block.querySelectorAll<HTMLElement>('.reveal-block'));
+    const targets = [...new Set([...textEls, ...wholeBlocks])];
+    if (!targets.length) return;
     if (prefersReduced) {
-      gsap.set(allLines, { opacity: 1, y: 0 });
-      gsap.set(wholeBlocks, { opacity: 1, y: 0 });
+      gsap.set(targets, { opacity: 1, y: 0 });
       return;
     }
 
-    // Set initial hidden state (faded and slightly lowered)
-    gsap.set(allLines, {
-      opacity: 0,
-      y: 22,
-    });
-    gsap.set(wholeBlocks, { opacity: 0, y: 16 });
-
-    const trigger = ScrollTrigger.create({
+    gsap.set(targets, { opacity: 0, y: 18 });
+    triggers.push(ScrollTrigger.create({
       trigger: block,
       start: 'top 85%',
       once: true,
-      onEnter: () => {
-        gsap.to(allLines, {
-          y: 0,
-          opacity: 1,
-          duration: 0.85,
-          stagger: 0.08,
-          ease: 'power2.out',
-        });
-        gsap.to(wholeBlocks, {
-          y: 0,
-          opacity: 1,
-          duration: 0.85,
-          stagger: 0.08,
-          ease: 'power2.out',
-        });
-      },
-    });
-
-    triggers.push(trigger);
+      onEnter: () => gsap.to(targets, {
+        y: 0,
+        opacity: 1,
+        duration: 0.8,
+        stagger: 0.045,
+        ease: 'power2.out',
+      }),
+    }));
   });
 
-  return {
-    destroy() {
-      triggers.forEach((st) => st.kill());
-    },
-  };
+  return { destroy: () => triggers.forEach((trigger) => trigger.kill()) };
 }
-

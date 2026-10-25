@@ -4,9 +4,9 @@
 
 ## Shapes
 
-- `india`: samples the supplied `public/shapes/india.svg` mask, emphasizing the outline and a small Delhi NCR particle cluster. If the asset is absent it warns and uses dust.
+- `india`: samples the supplied `assets/india.svg` mask, emphasizing the outline and a small Delhi NCR particle cluster. If the asset is absent it warns and uses dust.
 - `lens`: thin torus, sparse glass, upper-left highlight arc, and a 45° handle.
-- `f1`: samples the alpha silhouette from `/assets/f1.svg` using an offscreen canvas. If that file is absent or invalid, it warns and uses a built-in racing-mark placeholder.
+- `f1`: samples `/assets/f1.svg` first when present, then `/assets/f1.png`. PNG sampling uses alpha when meaningful, or detects foreground against the averaged corner colour, closes small holes, and retains the main logo components.
 - `dust`: sparse, wide background field that fills the viewport, drifts slowly,
   and dims to 60% alpha when it is the target shape.
 - `face`: samples the photo-derived `public/shapes/face.bin`. If the binary is absent it warns and uses dust. Scanlines, faint flicker, a slow vertical highlight band, and a faint base ring are weighted by the face morph value and fade out across adjacent transitions.

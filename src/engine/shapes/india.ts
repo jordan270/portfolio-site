@@ -6,8 +6,8 @@ let indiaLoad: Promise<void> | null = null;
 
 export function loadIndiaData(): Promise<void> {
   if (!indiaLoad) {
-    indiaLoad = loadSvgMask('/shapes/india.svg', 'india').then((mask) => { indiaMask = mask; }).catch((error: unknown) => {
-      console.warn('[ParticleEngine] public/shapes/india.svg unavailable; india uses the dust fallback.', error);
+    indiaLoad = loadSvgMask('/assets/india.svg', 'india').then((mask) => { indiaMask = mask; }).catch((error: unknown) => {
+      console.warn('[ParticleEngine] assets/india.svg unavailable; india uses the dust fallback.', error);
     });
   }
   return indiaLoad;
@@ -17,6 +17,11 @@ export function loadIndiaData(): Promise<void> {
 export function generate(count: number, seeds?: Float32Array): Float32Array {
   if (!indiaMask?.length) return dust(count, seeds);
   const mask = indiaMask;
+  const pathX = (77.2 - 68.1006) * 55.63;
+  const pathY = (37.0770 - 28.6) * 60;
+  const transform = mask.sourceTransform;
+  const delhiX = transform ? ((transform.offsetX + (pathX - transform.viewBoxX) * transform.scale - transform.centerX) / transform.span) * 1.4 : -0.18;
+  const delhiY = transform ? -((transform.offsetY + (pathY - transform.viewBoxY) * transform.scale - transform.centerY) / transform.span) * 1.4 : 0.30;
   const pixels = mask.length / 2;
   const occupied = new Set(mask.pixelIndices);
   const edge: number[] = [], interior: number[] = [];
@@ -43,9 +48,14 @@ export function generate(count: number, seeds?: Float32Array): Float32Array {
   for (let i = 0; i < count; i++) {
     const seed = seeds?.[i] ?? (i + 0.5) / Math.max(1, count);
     if (seed > 0.986) {
-      points[i * 3] = -0.18 + Math.sin(seed * 913) * 0.035;
-      points[i * 3 + 1] = 0.30 + Math.cos(seed * 733) * 0.035;
-      points[i * 3 + 2] = 0.052 + (seed * 17.13 % 1 - 0.5) * 0.008;
+      points[i * 3] = delhiX + Math.sin(seed * 913) * 0.035;
+      points[i * 3 + 1] = delhiY + Math.cos(seed * 733) * 0.035;
+      points[i * 3 + 2] = 0.082 + (seed * 17.13 % 1 - 0.5) * 0.008;
+    } else if (seed > 0.972) {
+      const angle = ((seed - 0.972) / 0.014) * Math.PI * 2;
+      points[i * 3] = delhiX + Math.cos(angle) * 0.105;
+      points[i * 3 + 1] = delhiY + Math.sin(angle) * 0.105;
+      points[i * 3 + 2] = 0.068;
     }
   }
   return points;
