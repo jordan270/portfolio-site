@@ -10,14 +10,14 @@
 1. hero (shape: face), text left, as already built.
 2. work: a small label "SELECTED WORK (04)" at the top left of the section,
    then four project cards, each its own scroll step (about 110vh):
-   - autopilot (shape: tower), card on the left
+   - autopilot (shape: python), card on the left
    - rhetoriclens (shape: lens), card on the right
-   - f1-sentiment (shape: bubble), card on the left
+   - f1-sentiment (shape: flags), card on the left
    - f1-analyzer (shape: f1), card on the right
 3. contact (shape: dust, particles in the background) with the clean SVG
    infinity line, as already built. Keep it unchanged.
-ShapeName = 'face'|'tower'|'lens'|'bubble'|'f1'|'dust'.
-Shape sequence: face -> tower -> lens -> bubble -> f1 -> dust.
+ShapeName = 'face'|'india'|'python'|'lens'|'flags'|'f1'|'dust'.
+Shape sequence: face -> india -> python -> lens -> flags -> f1 -> dust.
 The shape sits on the opposite side from the card (setOffset), filling about
 80% of the viewport height, so a card never hides its shape. Particles stay
 in the background across the whole page, below the cards in z-order.

@@ -3,15 +3,17 @@ import { generate as face, loadFaceData } from './shapes/face.ts';
 import { generate as india, loadIndiaData } from './shapes/india.ts';
 import { generate as lens } from './shapes/lens.ts';
 import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
-import { generate as tower } from './shapes/tower.ts';
+import { generate as python, loadPythonData } from './shapes/python.ts';
 import { generate as flags, loadFlagsData } from './shapes/flags.ts';
 import { generate as dust } from './shapes/dust.ts';
 
-export type ShapeName = 'face' | 'india' | 'tower' | 'lens' | 'flags' | 'f1' | 'dust';
+export type ShapeName = 'face' | 'india' | 'python' | 'lens' | 'flags' | 'f1' | 'dust';
+export interface FrameRect { x: number; y: number; w: number; h: number; }
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
+  setFrame(rect: FrameRect, shape?: ShapeName): void;
   setEnergy(value: number): void;
   setQuality(quality: 'high' | 'medium' | 'low' | 'auto'): void;
   setGlow(options: { radius?: number; dim?: number; boost?: number }): void;
@@ -20,7 +22,10 @@ export interface ParticleEngine {
   dispose(): void;
 }
 
-const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, tower, lens, flags, f1, dust };
+const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, python, lens, flags, f1, dust };
+
+interface ShapeBounds { minX: number; maxX: number; minY: number; maxY: number; maxAbsZ: number; }
+interface FrameTransform { rect: FrameRect; centerX: number; centerY: number; sourceX: number; sourceY: number; scale: number; screenBounds: FrameRect; }
 
 function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
   if (name === 'sphere') return 'face';
@@ -39,11 +44,12 @@ uniform float uMorph;
 uniform float uTime;
 uniform float uEnergy;
 uniform float uBreath;
-uniform float uOffsetFrom;
-uniform float uOffsetTo;
-uniform float uOffsetYFrom;
-uniform float uOffsetYTo;
-uniform float uShapeScale;
+uniform vec2 uFrameCenterFrom;
+uniform vec2 uFrameCenterTo;
+uniform vec2 uShapeCenterFrom;
+uniform vec2 uShapeCenterTo;
+uniform float uFrameScaleFrom;
+uniform float uFrameScaleTo;
 uniform float uPixelRatio;
 uniform float uSizeScale;
 uniform float uFaceFrom;
@@ -67,13 +73,17 @@ varying float vGlow;
 void main() {
   float t = clamp((uMorph - aSeed * 0.16) / (1.0 - 0.16), 0.0, 1.0);
   t = t * t * (3.0 - 2.0 * t);
-  vec3 p = mix(positionA, positionB, t);
+  vec3 fromPosition = positionA;
+  vec3 toPosition = positionB;
   float dustWeight = mix(uDustFrom, uDustTo, t);
-  p.x *= mix(1.0, uDustAspect, dustWeight);
+  fromPosition.x *= mix(1.0, uDustAspect, uDustFrom);
+  toPosition.x *= mix(1.0, uDustAspect, uDustTo);
+  fromPosition.xy = (fromPosition.xy - uShapeCenterFrom) * uFrameScaleFrom + uFrameCenterFrom;
+  toPosition.xy = (toPosition.xy - uShapeCenterTo) * uFrameScaleTo + uFrameCenterTo;
+  fromPosition.z *= uFrameScaleFrom;
+  toPosition.z *= uFrameScaleTo;
+  vec3 p = mix(fromPosition, toPosition, t);
   p.xy += vec2(sin(uTime * 0.12 + aSeed * 12.0), cos(uTime * 0.09 + aSeed * 17.0)) * (0.012 * dustWeight);
-  p *= uShapeScale;
-  p.x += mix(uOffsetFrom, uOffsetTo, t);
-  p.y += mix(uOffsetYFrom, uOffsetYTo, t);
   float transition = sin(t * 3.14159265);
   float phase = uTime * 0.55 + aSeed * 31.0;
   p += vec3(sin(p.y * 5.0 + phase), sin(p.z * 4.0 + phase * 1.13), cos(p.x * 4.5 + phase)) * (0.018 * transition);
@@ -96,8 +106,9 @@ void main() {
   vIndiaRing = smoothstep(0.064, 0.07, p.z) * (1.0 - smoothstep(0.075, 0.08, p.z)) * mix(uIndiaFrom, uIndiaTo, t);
   vDustWeight = dustWeight;
   vGlow = glow;
-  float faceSizeCap = mix(3.0, mix(1.6, 2.4, glow * uGlowSizeEnabled), vFaceWeight);
-  gl_PointSize = clamp(aSize * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap);
+  float faceSize = mix(1.0, 1.9, fract(aSeed * 21739.319));
+  float faceSizeCap = mix(3.0, mix(1.9, 2.85, glow * uGlowSizeEnabled), vFaceWeight);
+  gl_PointSize = clamp(mix(aSize, faceSize, vFaceWeight) * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap);
 }`;
 
 const fragmentShader = `
@@ -116,8 +127,11 @@ void main() {
   float r = length(q);
   if (r > 0.5) discard;
   float falloff = 1.0 - smoothstep(0.12, 0.5, r);
-  float variation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
-  float baseAlpha = variation * uOpacity * uAlphaScale * mix(1.0, 0.6, vDustWeight) * uBaseDim;
+  float ordinaryVariation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
+  float faceVariation = mix(1.0, 1.5, fract(vSeed * 31817.171));
+  float variation = mix(ordinaryVariation, faceVariation, vFaceWeight);
+  float faceDim = mix(1.0, 0.9, vFaceWeight);
+  float baseAlpha = variation * uOpacity * uAlphaScale * mix(1.0, 0.6, vDustWeight) * uBaseDim * faceDim;
   float glowAlpha = baseAlpha * mix(1.0, 1.0 / max(0.05, uBaseDim), vGlow);
   float indiaPulse = 0.78 + 0.22 * sin(uTime * 1.4);
   float indiaRingAlpha = vIndiaRing * indiaPulse * 0.16;
@@ -165,10 +179,62 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   for (let i = 0; i < count; i++) seeds[i] = Math.random();
   const clock = new THREE.Clock();
   const shapeCache = new Map<ShapeName, Float32Array>();
+  const shapeBoundsCache = new Map<ShapeName, ShapeBounds>();
+  const shapeFrames = new Map<ShapeName, FrameRect>();
+  if (new URLSearchParams(location.search).has('debugFrames')) (window as Window & { __particleFrameDebug?: Record<string, { rect: FrameRect; projected: FrameRect }> }).__particleFrameDebug = {};
   const getShape = (name: ShapeName) => {
     let value = shapeCache.get(name);
     if (!value) { value = generators[name](count, seeds); shapeCache.set(name, value); }
     return value;
+  };
+  const getShapeBounds = (name: ShapeName): ShapeBounds => {
+    let bounds = shapeBoundsCache.get(name);
+    if (bounds) return bounds;
+    const data = getShape(name);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, maxAbsZ = 0;
+    const dustAspect = name === 'dust' ? window.innerWidth / Math.max(1, window.innerHeight) / 1.6 : 1;
+    for (let i = 0; i < data.length; i += 3) {
+      const x = data[i] * dustAspect, y = data[i + 1], z = Math.abs(data[i + 2]);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); maxAbsZ = Math.max(maxAbsZ, z);
+    }
+    bounds = { minX, maxX, minY, maxY, maxAbsZ };
+    shapeBoundsCache.set(name, bounds);
+    return bounds;
+  };
+  const fitShapeToFrame = (name: ShapeName, rect: FrameRect): FrameTransform => {
+    const bounds = getShapeBounds(name), cameraZ = camera?.position.z ?? 4.2;
+    const height = Math.max(1, container?.clientHeight ?? window.innerHeight);
+    const unitsPerPixel = 2 * cameraZ * Math.tan(THREE.MathUtils.degToRad(45 / 2)) / height;
+    const spanX = Math.max(1e-4, bounds.maxX - bounds.minX), spanY = Math.max(1e-4, bounds.maxY - bounds.minY);
+    const availableWidth = Math.max(1, rect.w) * unitsPerPixel, availableHeight = Math.max(1, rect.h) * unitsPerPixel;
+    let scale = Math.min(availableWidth / spanX, availableHeight / spanY);
+    for (let i = 0; i < 3; i++) {
+      const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
+      scale *= Math.min(1, availableWidth / (spanX * scale * perspective), availableHeight / (spanY * scale * perspective));
+    }
+    scale *= 0.92;
+    const sourceX = (bounds.minX + bounds.maxX) / 2, sourceY = (bounds.minY + bounds.maxY) / 2;
+    const centerX = (rect.x + rect.w / 2 - window.innerWidth / 2) * unitsPerPixel;
+    const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
+    const screenW = spanX * scale * perspective / unitsPerPixel, screenH = spanY * scale * perspective / unitsPerPixel;
+    const hero = name === 'face' && rect.h > window.innerHeight;
+    const centerY = (window.innerHeight / 2 - (hero ? rect.y + screenH / 2 : rect.y + rect.h / 2)) * unitsPerPixel;
+    const screenBounds = { x: rect.x + rect.w / 2 - screenW / 2, y: rect.y + rect.h / 2 - screenH / 2, w: screenW, h: screenH };
+    return { rect, centerX, centerY, sourceX, sourceY, scale, screenBounds };
+  };
+  const applyFrameUniform = (name: ShapeName, transform: FrameTransform, endpoint: 'From' | 'To') => {
+    if (!material) return;
+    (material.uniforms[`uFrameCenter${endpoint}`].value as THREE.Vector2).set(transform.centerX, transform.centerY);
+    (material.uniforms[`uShapeCenter${endpoint}`].value as THREE.Vector2).set(transform.sourceX, transform.sourceY);
+    material.uniforms[`uFrameScale${endpoint}`].value = transform.scale;
+    const debugFrames = (window as Window & { __particleFrameDebug?: Record<string, { rect: FrameRect; projected: FrameRect }> }).__particleFrameDebug;
+    if (debugFrames) debugFrames[name] = { rect: transform.rect, projected: transform.screenBounds };
+  };
+  const updateFrameUniforms = () => {
+    const full = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
+    const fromRect = shapeFrames.get(fromName) ?? full, toRect = shapeFrames.get(toName) ?? full;
+    applyFrameUniform(fromName, fitShapeToFrame(fromName, fromRect), 'From');
+    applyFrameUniform(toName, fitShapeToFrame(toName, toRect), 'To');
   };
   const onPointer = (event: PointerEvent) => {
     pointerX = THREE.MathUtils.clamp((event.clientX / Math.max(1, window.innerWidth) * 2 - 1), -1, 1);
@@ -186,7 +252,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const setCount = (nextCount: number) => {
     if (count === nextCount) return;
     count = nextCount;
-    shapeCache.clear();
+    shapeCache.clear(); shapeBoundsCache.clear();
     seeds = new Float32Array(count);
     for (let i = 0; i < count; i++) seeds[i] = Math.random();
     if (!geometry) return;
@@ -198,6 +264,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
     installShapes(fromName, toName);
+    updateFrameUniforms();
   };
   const render = () => {
     if (!renderer || !scene || !camera || !material || disposed || document.hidden) return;
@@ -245,8 +312,6 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         trailUniforms[i].set(trailX[i] * dpr, trailY[i] * dpr, Math.exp(-trailAge[i] * 3) * glowActivity);
       }
     }
-    const activeMorph = material.uniforms.uMorph.value as number;
-    material.uniforms.uShapeScale.value = layoutScale(fromName) * (1 - activeMorph) + layoutScale(toName) * activeMorph;
     if (points) {
       const idleYaw = reducedMotion ? 0 : Math.sin(elapsed * 0.24) * THREE.MathUtils.degToRad(4);
       const mouseYaw = reducedMotion ? 0 : smoothX * THREE.MathUtils.degToRad(4);
@@ -264,43 +329,6 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     geometry.attributes.positionA.needsUpdate = true;
     geometry.attributes.positionB.needsUpdate = true;
   };
-  const layoutOffsetX = (shape: ShapeName) => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) return 0;
-    if (shape === 'dust') return 0;
-    if (typeof window !== 'undefined' && window.innerWidth <= 1100) {
-      if (shape === 'face') return 0;
-      if (shape === 'india') return -1.5;
-      if (shape === 'tower' || shape === 'flags') return 1.5;
-      if (shape === 'lens') return -1.65;
-      return -1.5;
-    }
-    if (shape === 'face') return 0;
-    if (shape === 'india') return -1.5;
-    if (shape === 'tower') return 2.0;
-    if (shape === 'flags') return 1.65;
-    return shape === 'lens' ? -1.9 : -2.0;
-  };
-  const layoutOffsetY = (shape: ShapeName) => {
-    if (typeof window === 'undefined') return 0;
-    const width = window.innerWidth;
-    if (width <= 768) return shape === 'face' ? 0 : 1.0;
-    return 0;
-  };
-  const layoutScale = (shape: ShapeName) => {
-    if (typeof window === 'undefined' || window.innerWidth > 768) return 1;
-    if (shape === 'dust') return 1;
-    return shape === 'face' ? 0.88 : 0.25;
-  };
-  const updateLayoutOffsets = () => {
-    if (!material) return;
-    material.uniforms.uOffsetFrom.value = layoutOffsetX(fromName);
-    material.uniforms.uOffsetTo.value = layoutOffsetX(toName);
-    material.uniforms.uOffsetYFrom.value = layoutOffsetY(fromName);
-    material.uniforms.uOffsetYTo.value = layoutOffsetY(toName);
-    const morph = material.uniforms.uMorph.value as number;
-    material.uniforms.uShapeScale.value = layoutScale(fromName) * (1 - morph) + layoutScale(toName) * morph;
-  };
-
   return {
     mount(target) {
       if (disposed) throw new Error('Cannot mount a disposed ParticleEngine');
@@ -320,7 +348,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uOffsetFrom: { value: 0 }, uOffsetTo: { value: 0 }, uOffsetYFrom: { value: 0 }, uOffsetYTo: { value: 0 }, uShapeScale: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new THREE.Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
+        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new THREE.Vector2() }, uFrameCenterTo: { value: new THREE.Vector2() }, uShapeCenterFrom: { value: new THREE.Vector2() }, uShapeCenterTo: { value: new THREE.Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new THREE.Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
@@ -346,10 +374,12 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       window.addEventListener('pointercancel', onPointerRelease, { passive: true });
       window.addEventListener('pointerleave', onPointerLeave, { passive: true });
       document.addEventListener('visibilitychange', onVisibility);
-      void Promise.all([loadFaceData(), loadIndiaData(), loadF1Source(), loadFlagsData()]).then(() => {
+      void Promise.all([loadFaceData(), loadIndiaData(), loadPythonData(), loadF1Source(), loadFlagsData()]).then(() => {
         if (disposed || !geometry) return;
-        shapeCache.delete('face'); shapeCache.delete('india'); shapeCache.delete('f1'); shapeCache.delete('flags');
-        if (fromName === 'face' || toName === 'face' || fromName === 'india' || toName === 'india' || fromName === 'f1' || toName === 'f1' || fromName === 'flags' || toName === 'flags') installShapes(fromName, toName);
+        shapeCache.delete('face'); shapeCache.delete('india'); shapeCache.delete('python'); shapeCache.delete('f1'); shapeCache.delete('flags');
+        shapeBoundsCache.clear();
+        if (fromName === 'face' || toName === 'face' || fromName === 'india' || toName === 'india' || fromName === 'python' || toName === 'python' || fromName === 'f1' || toName === 'f1' || fromName === 'flags' || toName === 'flags') installShapes(fromName, toName);
+        updateFrameUniforms();
       });
       raf = requestAnimationFrame(render);
     },
@@ -364,10 +394,15 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
           material.uniforms.uIndiaTo.value = to === 'india' ? 1 : 0;
           material.uniforms.uDustFrom.value = from === 'dust' ? 1 : 0;
           material.uniforms.uDustTo.value = to === 'dust' ? 1 : 0;
-          updateLayoutOffsets();
+          updateFrameUniforms();
         }
       }
       targetMorph = reducedMotion ? 0 : THREE.MathUtils.clamp(t, 0, 1);
+    },
+    setFrame(rect, shape = toName) {
+      if (![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) || rect.w <= 0 || rect.h <= 0) return;
+      shapeFrames.set(shape, { x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+      updateFrameUniforms();
     },
     setEnergy(value) { energy = Number.isFinite(value) ? Math.max(0, value) : 1; },
     setDebugScales(size, alpha) {
@@ -403,7 +438,8 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       }
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      updateLayoutOffsets();
+      shapeBoundsCache.clear();
+      updateFrameUniforms();
     },
     dispose() {
       if (disposed) return;
