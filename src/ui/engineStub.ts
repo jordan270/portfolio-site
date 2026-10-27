@@ -7,6 +7,8 @@ export interface ParticleEngine {
   mount(container: HTMLElement): void;
   setIntro(progress: number): void;
   setIntroReady(ready: boolean): void;
+  setLoaderPhase(phase: 'spinner' | 'contract' | 'burst' | 'gather' | 'face' | 'crossfade', progress: number, time: number): void;
+  setMorphStyle(style: 'standard' | 'hologram'): void;
   prepareIntro(onMilestone: (milestone: 'hero-data' | 'shader-warmup' | 'calibration') => void): Promise<void>;
   getQualityTier(): 'high' | 'medium' | 'low';
   setIntroReady(ready: boolean): void;
@@ -227,6 +229,8 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
 
     setIntro(_progress) {},
     setIntroReady(_ready) {},
+    setLoaderPhase(_phase, _progress, _time) {},
+    setMorphStyle(_style) {},
     async prepareIntro(onMilestone) { onMilestone('hero-data'); onMilestone('shader-warmup'); onMilestone('calibration'); },
     getQualityTier() { return 'low'; },
     setMorph(from, to, t) {

@@ -15,6 +15,8 @@ export interface ParticleEngine {
   mount(container: HTMLElement): void;
   setIntro(progress: number): void;
   setIntroReady(ready: boolean): void;
+  setLoaderPhase(phase: 'spinner' | 'contract' | 'burst' | 'gather' | 'face' | 'crossfade', progress: number, time: number): void;
+  setMorphStyle(style: 'standard' | 'hologram'): void;
   prepareIntro(onMilestone: (milestone: 'hero-data' | 'shader-warmup' | 'calibration') => void): Promise<void>;
   getQualityTier(): 'high' | 'medium' | 'low';
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
@@ -66,6 +68,12 @@ uniform float uMorphActive;
 uniform float uIntroActive;
 uniform float uIntroProgress;
 uniform float uIntroReady;
+uniform float uIntroSwirlScale;
+uniform float uLoaderMode;
+uniform float uLoaderPhase;
+uniform float uLoaderProgress;
+uniform float uLoaderTime;
+uniform float uLoaderAmbientShare;
 uniform float uPositionScaleA;
 uniform float uPositionScaleB;
 uniform float uPositionScaleScatter;
@@ -110,6 +118,7 @@ varying float vDustWeight;
 varying float vGlow;
 varying float vShapeScale;
 varying float vShapeAlpha;
+varying float vLoaderAlpha;
 void main() {
   float t = clamp((uMorph - aSeed * 0.16) / (1.0 - 0.16), 0.0, 1.0);
   t = t * t * (3.0 - 2.0 * t);
@@ -137,7 +146,7 @@ void main() {
       p = mix(positionScatter * uPositionScaleScatter, toPosition, introT);
       float introSwirl = sin(introT * 3.14159265);
       float introPhase = uTime * 0.55 + aSeed * 31.0;
-      p += vec3(sin(p.y * 5.0 + introPhase), sin(p.z * 4.0 + introPhase * 1.13), cos(p.x * 4.5 + introPhase)) * (0.25 * introSwirl);
+      p += vec3(sin(p.y * 5.0 + introPhase), sin(p.z * 4.0 + introPhase * 1.13), cos(p.x * 4.5 + introPhase)) * (uIntroSwirlScale * introSwirl);
     }
   } else {
     p = mix(fromPosition, toPosition, t);
@@ -151,6 +160,66 @@ void main() {
   if (uIntroActive < 0.5 || uIntroReady > 0.5) p *= uBreath;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   vec4 clipPosition = projectionMatrix * mvPosition;
+  vLoaderAlpha = 1.0;
+  if (uLoaderMode > 0.5) {
+    const float TAU = 6.28318530718;
+    float ambient = step(1.0 - uLoaderAmbientShare, aSeed);
+    float ringParticle = 1.0 - step(0.04, aSeed);
+    float ringSlot = floor(clamp(aSeed / 0.04, 0.0, 0.9999) * 12.0);
+    float ringAngle = ringSlot * TAU / 12.0 - uLoaderTime * TAU / 1.1;
+    float ringRadius = max(36.0, min(uGlowResolution.x, uGlowResolution.y) / uPixelRatio * 0.045) * uPixelRatio;
+    vec2 ringNdc = vec2(cos(ringAngle) * ringRadius * 2.0 / uGlowResolution.x,
+                        sin(ringAngle) * ringRadius * 2.0 / uGlowResolution.y);
+    float clusterJitter = (fract(aSeed * 269.5) - 0.5) * 0.004;
+    ringNdc += vec2(cos(aSeed * 719.0), sin(aSeed * 719.0)) * clusterJitter;
+    float headDistance = mod(ringSlot - uLoaderTime * 12.0 / 1.1 + 12.0, 12.0);
+    float headAlpha = 1.0 - 0.9 * headDistance / 12.0;
+    vec4 scatterClip = projectionMatrix * modelViewMatrix * vec4(positionScatter * uPositionScaleScatter, 1.0);
+    vec2 scatterNdc = scatterClip.xy / max(0.0001, scatterClip.w);
+    vec4 faceClip = projectionMatrix * modelViewMatrix * vec4(toPosition, 1.0);
+    vec2 faceNdc = faceClip.xy / max(0.0001, faceClip.w);
+    vec2 columnNdc = vec2((fract(aSeed * 721.3) - 0.5) * 0.12,
+                          scatterNdc.y * 0.78);
+    vec2 loaderNdc = scatterNdc;
+    float alpha = 0.0;
+    float easeP = uLoaderProgress * uLoaderProgress * (3.0 - 2.0 * uLoaderProgress);
+    if (uLoaderPhase < 0.5) {
+      float settle = smoothstep(0.455, 1.0, uLoaderProgress);
+      vec2 tighteningScatter = scatterNdc * (1.0 - 0.62 * settle);
+      loaderNdc = mix(tighteningScatter, ringNdc, ringParticle * easeP);
+      float fadeIn = smoothstep(0.0, 0.46, uLoaderProgress);
+      alpha = mix(0.025 * fadeIn * (1.0 - settle), 2.8 * headAlpha * fadeIn, ringParticle);
+      alpha = mix(alpha, 0.11 * fadeIn, ambient);
+    } else if (uLoaderPhase < 1.5) {
+      loaderNdc = mix(ringNdc, vec2(0.0), ringParticle * easeP);
+      alpha = ringParticle * (2.8 * headAlpha) + ambient * 0.11;
+    } else if (uLoaderPhase < 2.5) {
+      loaderNdc = scatterNdc * easeP;
+      alpha = (1.0 - ambient) * 0.16 + ambient * 0.11;
+    } else if (uLoaderPhase < 3.5) {
+      loaderNdc = mix(scatterNdc, columnNdc, easeP);
+      alpha = (1.0 - ambient) * 0.28 + ambient * 0.11;
+    } else if (uLoaderPhase < 4.5) {
+      float stagger = clamp((uLoaderProgress - aSeed * 0.16) / 0.84, 0.0, 1.0);
+      stagger = stagger * stagger * (3.0 - 2.0 * stagger);
+      vec2 swirl = vec2(sin(aSeed * 97.0 + uLoaderTime * 0.8), cos(aSeed * 73.0 + uLoaderTime * 0.7)) * (uIntroSwirlScale * 0.2 * sin(stagger * 3.14159265));
+      loaderNdc = mix(columnNdc, faceNdc, stagger) + swirl;
+      alpha = (1.0 - ambient) * stagger + ambient * 0.09;
+    } else {
+      loaderNdc = mix(ringNdc, faceNdc, easeP);
+      alpha = mix(2.8 * headAlpha, 1.0, easeP) * (1.0 - ambient) + ambient * 0.09;
+    }
+    if (ambient > 0.5) {
+      float drift = uLoaderTime * 0.00045;
+      loaderNdc = scatterNdc;
+      loaderNdc += vec2(sin(scatterNdc.y * 4.0 + aSeed * 11.0), cos(scatterNdc.x * 3.0 + aSeed * 13.0)) * 0.002;
+      loaderNdc += vec2(sin(aSeed * 17.0 + drift), cos(aSeed * 23.0 + drift * 0.8)) * 0.0007;
+    }
+    clipPosition = vec4(loaderNdc, 0.0, 1.0);
+    vLoaderAlpha = max(0.0, alpha);
+    float ringSize = ringParticle > 0.5 ? (0.8 + 1.6 * headAlpha) : 0.55;
+    gl_PointSize = clamp(aSize * ringSize * uPixelRatio, 1.0, 4.0 * uPixelRatio);
+  }
   gl_Position = clipPosition;
   vec2 ndc = clipPosition.xy / max(0.0001, clipPosition.w);
   vec2 screenPixels = vec2((ndc.x * 0.5 + 0.5) * uGlowResolution.x, (0.5 - ndc.y * 0.5) * uGlowResolution.y);
@@ -175,10 +244,11 @@ void main() {
   float dustTier = fract(aSeed * 43758.5453);
   float dustSize = dustTier < uContactDustTierCutoffs.x ? uContactDustSizeTiers.x : dustTier < uContactDustTierCutoffs.y ? uContactDustSizeTiers.y : uContactDustSizeTiers.z;
   float contactSize = mix(1.0, dustSize, vDustWeight);
-  gl_PointSize = clamp(mix(aSize * contactSize, faceSize, vFaceWeight) * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * vShapeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap * vShapeScale);
+  if (uLoaderMode < 0.5) gl_PointSize = clamp(mix(aSize * contactSize, faceSize, vFaceWeight) * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * vShapeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap * vShapeScale);
 }`;
 
 const fragmentShader = `
+uniform float uLoaderMode;
 uniform float uOpacity;
 uniform float uAlphaScale;
 uniform float uBaseDim;
@@ -195,6 +265,7 @@ varying float vDustWeight;
 varying float vGlow;
 varying float vShapeAlpha;
 varying float vShapeScale;
+varying float vLoaderAlpha;
 void main() {
   vec2 q = gl_PointCoord - vec2(0.5);
   float r = length(q);
@@ -214,7 +285,8 @@ void main() {
   float glowAlpha = baseAlpha * mix(1.0, 1.0 / max(0.05, uBaseDim), vGlow);
   float indiaPulse = 0.78 + 0.22 * sin(uTime * 1.4);
   float indiaRingAlpha = vIndiaRing * indiaPulse * 0.16;
-  gl_FragColor = vec4(vec3(1.0), min(1.0, falloff * (clamp(glowAlpha, 0.0, 1.0) * mix(1.0, 1.2, vIndiaGlow) + indiaRingAlpha)));
+  float finalAlpha = falloff * (clamp(glowAlpha, 0.0, 1.0) * mix(1.0, 1.2, vIndiaGlow) + indiaRingAlpha);
+  gl_FragColor = vec4(vec3(1.0), min(1.0, finalAlpha * mix(1.0, vLoaderAlpha, uLoaderMode)));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -265,6 +337,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   let introActive = false;
   let introProgress = 1;
   let introReady = true;
+  let loaderPhase = 0;
+  let loaderProgress = 0;
+  let loaderTime = 0;
+  let morphSwirlScale = 0.25;
   let targetMorph = 0;
   let fromName: ShapeName = 'face';
   let toName: ShapeName = 'face';
@@ -517,6 +593,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     material.uniforms.uIntroProgress.value = introProgress;
     material.uniforms.uIntroReady.value = introReady ? 1 : 0;
     const elapsed = clock.elapsedTime;
+    if (!reducedMotion && loaderPhase === 4 && loaderProgress >= 1 && material.uniforms.uLoaderMode.value > 0.5) {
+      loaderTime = elapsed;
+      material.uniforms.uLoaderTime.value = elapsed;
+    }
     material.uniforms.uTime.value = reducedMotion ? 0 : elapsed * Math.max(0, energy);
     material.uniforms.uEnergy.value = energy;
     material.uniforms.uBreath.value = reducedMotion ? 1 : 1 + Math.sin(elapsed * 0.65) * 0.012 * Math.max(0, energy);
@@ -603,6 +683,12 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         uniforms: { uMorph: { value: 0 }, uMorphActive: { value: 0 }, uIntroActive: { value: 0 }, uIntroProgress: { value: 1 }, uIntroReady: { value: 1 }, uGlowActive: { value: 0 }, uPositionScaleA: { value: initialFace.scale }, uPositionScaleB: { value: initialFace.scale }, uPositionScaleScatter: { value: initialScatter.scale }, uShapeScaleFrom: { value: shapePointScale.face }, uShapeScaleTo: { value: shapePointScale.face }, uShapeAlphaFrom: { value: shapeAlphaScale.face }, uShapeAlphaTo: { value: shapeAlphaScale.face }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new Vector2() }, uFrameCenterTo: { value: new Vector2() }, uShapeCenterFrom: { value: new Vector2() }, uShapeCenterTo: { value: new Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uFrameScaleXFrom: { value: 1 }, uFrameScaleXTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, qualityTier === 'high' ? 1.5 : qualityTier === 'medium' ? 1.25 : 1) }, uSizeScale: { value: pointScaleForTier(qualityTier) }, uAlphaScale: { value: alphaScaleForTier(qualityTier) }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
       });
       material.uniforms.uIndiaIdleDim = { value: PARTICLE_VISIBILITY.INDIA_IDLE_DIM };
+      material.uniforms.uIntroSwirlScale = { value: morphSwirlScale };
+      material.uniforms.uLoaderMode = { value: 1 };
+      material.uniforms.uLoaderPhase = { value: loaderPhase };
+      material.uniforms.uLoaderProgress = { value: loaderProgress };
+      material.uniforms.uLoaderTime = { value: loaderTime };
+      material.uniforms.uLoaderAmbientShare = { value: 0.18 };
       material.uniforms.uContactDustAlphaTiers = { value: new Vector3(PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.medium, PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.star) };
       material.uniforms.uContactDustSizeTiers = { value: new Vector3(PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.medium, PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.star) };
       material.uniforms.uContactDustTierCutoffs = { value: new Vector2(PARTICLE_VISIBILITY.CONTACT_DUST_TIER_CUTOFFS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_TIER_CUTOFFS.medium) };
@@ -665,6 +751,31 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       if (material) material.uniforms.uIntroReady.value = ready ? 1 : 0;
       requestActiveFrame();
     },
+    setLoaderPhase(phase, progress, time) {
+      if (!Number.isFinite(progress) || !Number.isFinite(time)) return;
+      loaderPhase = { spinner: 0, contract: 1, burst: 2, gather: 3, face: 4, crossfade: 5 }[phase];
+      loaderProgress = MathUtils.clamp(progress, 0, 1);
+      loaderTime = Math.max(0, time);
+      introActive = phase !== 'face' || loaderProgress < 1;
+      if (phase === 'face' && (fromName !== 'face' || toName !== 'face')) {
+        fromName = 'face'; toName = 'face'; targetMorph = 0;
+        installShapes(fromName, toName);
+        updateFrameUniforms();
+      }
+      if (material) {
+        material.uniforms.uLoaderMode.value = 1;
+        material.uniforms.uLoaderPhase.value = loaderPhase;
+        material.uniforms.uLoaderProgress.value = loaderProgress;
+        material.uniforms.uLoaderTime.value = loaderTime;
+        material.uniforms.uLoaderAmbientShare.value = qualityTier === 'low' ? 0.15 : qualityTier === 'medium' ? 0.17 : 0.18;
+      }
+      requestActiveFrame();
+    },
+    setMorphStyle(style) {
+      morphSwirlScale = style === 'hologram' ? 0.06 : 0.25;
+      if (material) material.uniforms.uIntroSwirlScale.value = morphSwirlScale;
+      requestActiveFrame();
+    },
     async prepareIntro(onMilestone) {
       await heroDataReady;
       onMilestone('hero-data');
@@ -698,6 +809,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     getQualityTier() { return qualityTier; },
     setMorph(from, to, t) {
       if (introActive) return;
+      if (material && (from !== 'face' || to !== 'face' || t > 0.002)) material.uniforms.uLoaderMode.value = 0;
       lastScrollAt = performance.now();
       from = normalizeShape(from); to = normalizeShape(to);
       if (from !== fromName || to !== toName) {

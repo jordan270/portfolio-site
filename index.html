@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="is-loading intro-pending">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,14 +11,11 @@
     <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/face.png" as="image" fetchpriority="high" />
     <link rel="stylesheet" href="/src/style.css" />
+    <style>html, body { background: #26262b; }</style>
   </head>
   <body>
     <div id="stage" aria-hidden="true"></div>
     <canvas id="comet-canvas" aria-hidden="true"></canvas>
-    <div id="boot-loader" aria-live="polite">
-      <canvas id="boot-canvas" aria-hidden="true"></canvas>
-      <div id="boot-label"><span>LOADING</span><span id="boot-percent">0%</span><span id="boot-progress"></span></div>
-    </div>
     <main id="main">
       <section id="hero" class="section section--hero" data-shape="face">
         <div class="content-block hero-copy">
@@ -90,33 +87,6 @@
         </div>
       </section>
     </main>
-    <script>
-      document.documentElement.classList.add('is-loading');
-      (() => {
-        const canvas = document.getElementById('boot-canvas');
-        const context = canvas.getContext('2d');
-        let width = 0, height = 0, dpr = 1;
-        const paint = () => {
-          dpr = Math.min(devicePixelRatio || 1, 1.5);
-          width = innerWidth; height = innerHeight;
-          canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
-          canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
-          context.setTransform(dpr, 0, 0, dpr, 0, 0); context.clearRect(0, 0, width, height);
-          const cols = 24, rows = 16;
-          for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
-            const seed = row * cols + col + 1;
-            const jx = (Math.sin(seed * 127.1) * 43758.5453) % 1;
-            const jy = (Math.sin(seed * 269.5) * 24634.6345) % 1;
-            const x = (col + Math.abs(jx)) / cols * width, y = (row + Math.abs(jy)) / rows * height;
-            context.fillStyle = `rgba(255,255,255,${0.18 + (seed % 5) * 0.035})`;
-            context.beginPath(); context.arc(x, y, 1.05 + seed % 3 * 0.16, 0, Math.PI * 2); context.fill();
-          }
-        };
-        const resize = () => paint();
-        addEventListener('resize', resize, { passive: true }); paint();
-        window.__bootStop = () => { removeEventListener('resize', resize); context.clearRect(0, 0, canvas.width, canvas.height); };
-      })();
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

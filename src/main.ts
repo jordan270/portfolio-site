@@ -28,12 +28,16 @@ async function startApp(): Promise<void> {
     : (await import('./engine/index.ts')).createEngine() as unknown as ParticleEngine;
 
   engine.mount(stage);
+  let scroll: ReturnType<typeof initScroll> | null = null;
 
   // 2. Adaptive quality
   engine.setQuality('auto');
 
   // 2a. Begin from a viewport-wide WebGL scatter before assembling the hero.
-  initIntro(engine, () => scroll.update());
+  initIntro(engine, () => {
+    scroll?.lenis.start();
+    scroll?.update();
+  });
 
   // 3. Handle window resize
   window.addEventListener('resize', () => {
@@ -60,7 +64,7 @@ async function startApp(): Promise<void> {
     engine.setEnergy(0);
   }
 
-  const scroll = initScroll((from, to, t) => {
+  scroll = initScroll((from, to, t) => {
     if (prefersReduced) {
       // Static shape per SPEC under reduced motion — snap, no interpolation
       engine.setMorph(from, to, t < 0.5 ? 0 : 1);
@@ -68,6 +72,7 @@ async function startApp(): Promise<void> {
       engine.setMorph(from, to, t);
     }
   });
+  scroll.lenis.stop();
 }
 
 const boot = () => { requestAnimationFrame(() => { void startApp(); }); };

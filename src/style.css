@@ -91,33 +91,10 @@ html.lenis, html.lenis body {
   overflow: hidden;
 }
 
-#boot-loader {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  background: var(--bg-color);
-  pointer-events: none;
-}
-#boot-loader[hidden] { display: none; }
-#boot-canvas { position: absolute; inset: 0; display: block; transition: opacity 500ms ease; }
-#boot-canvas.is-fading { opacity: 0; }
-#boot-label {
-  position: absolute;
-  left: 24px;
-  bottom: 22px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  color: var(--text-dim);
-  font-size: .7rem;
-  font-weight: 300;
-  letter-spacing: .12em;
-  font-variant-numeric: tabular-nums;
-  transition: opacity 300ms ease;
-}
-#boot-label.is-fading { opacity: 0; }
-#boot-progress { position: absolute; left: 0; top: calc(100% + 7px); width: 140px; height: 1px; background: rgba(255,255,255,.62); transform: scaleX(0); transform-origin: left center; transition: transform 100ms linear; }
 html.is-loading #main { visibility: hidden; }
+html.intro-pending #main > .section:not(#hero) { visibility: hidden; }
+html.intro-pending #hero .hero-name-group,
+html.intro-pending #hero .hero-role-group { opacity: 0; transform: translateY(18px); }
 
 @media (pointer: coarse), (hover: none) {
   #comet-canvas {

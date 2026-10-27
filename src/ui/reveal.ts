@@ -14,6 +14,7 @@ export function initReveal(): RevealController {
   const triggers: ScrollTrigger[] = [];
 
   blocks.forEach((block) => {
+    if (block.closest('#hero')) return;
     const textEls = Array.from(block.querySelectorAll<HTMLElement>('.reveal-text'));
     const wholeBlocks = Array.from(block.querySelectorAll<HTMLElement>('.reveal-block'));
     const targets = [...new Set([...textEls, ...wholeBlocks])];
