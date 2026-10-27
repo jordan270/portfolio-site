@@ -249,7 +249,6 @@ html.intro-pending #hero .hero-role-group { opacity: 0; transform: translateY(18
   .project-title-row h2 { transition: color 400ms ease; }
   .project-card:has(.project-preview-link:hover) .project-title-row h2 { color: rgba(255,255,255,.82); }
 }
-.project-preview-link:focus-visible, .project-links a:focus-visible { outline: 2px solid #fff; }
 
 /* Content stays in a bounded column so it cannot cover the hologram. */
 .content-block {
@@ -572,8 +571,10 @@ h1, h2, .hero-role { text-wrap: balance; }
   opacity: 1;
 }
 
-/* Visible focus styles on all links */
-a:focus-visible {
+/* Visible keyboard focus for links and buttons */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 4px;
   border-radius: 2px;

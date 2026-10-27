@@ -16,7 +16,7 @@ const RACE_ANALYZER_REPO_URL = 'https://github.com/jordan270';
 
 const projects: ProjectCardData[] = [
   { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', concept: false, fact: 'Top 5 overall' },
-  { section: 'lens', slug: 'rhetoriclens', title: 'RhetoricLens', year: '2026', label: 'JAI 2026 Hackathon', description: 'A team-built web app that analyses arguments for logical fallacies. I worked on UI consistency and low-end device performance.', tags: 'Python, FastAPI, HTML/CSS/JS', concept: false, href: 'https://github.com/Adhyan0112/Rhetoric-lenss', linkText: 'View on GitHub' },
+  { section: 'lens', slug: 'rhetoriclens', title: 'RhetoricLens', year: '2026', label: 'JAI 2026 Hackathon', description: 'A web app, built with a team, that analyses arguments for logical fallacies. I worked on UI consistency and low-end device performance.', tags: 'Python, FastAPI, HTML/CSS/JS', concept: false, href: 'https://github.com/Adhyan0112/Rhetoric-lenss', linkText: 'View on GitHub' },
   { section: 'sentiment', slug: 'f1-sentiment', title: 'F1 Race Sentiment Tracker', year: '2026', label: 'Formula 1', description: 'Scores fan reactions to F1 races with a pre-trained HuggingFace model, and documents where it fails on sarcasm.', tags: 'Python, HuggingFace, uv', concept: true, href: 'https://github.com/jordan270/projects', linkText: 'Sentiment Tracker' },
   { section: 'analyzer', slug: 'f1-analyzer', title: 'F1 Race Analyzer', year: '2026', label: 'Harvard CS50P final project', description: 'Pulls live race data from the Jolpica API, with fastest laps and pit-stop strategies, covered by pytest.', tags: 'Python, REST APIs, pytest', concept: true, href: RACE_ANALYZER_REPO_URL, linkText: 'Race Analyzer' },
 ];
@@ -57,7 +57,7 @@ export function initProjectCards(): void {
       videos.push(video);
     } else if (asset) {
       const image = document.createElement('img');
-      image.src = asset; image.alt = ''; image.width = 1280; image.height = 720;
+      image.src = asset; image.alt = `${project.title} project preview${project.concept ? ' (concept visual)' : ''}`; image.width = 1280; image.height = 720;
       image.decoding = 'async'; image.loading = projectIndex === 0 ? 'eager' : 'lazy';
       void image.decode().catch(() => {}).then(() => image.classList.add('is-decoded'));
       media.append(image);

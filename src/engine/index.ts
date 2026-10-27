@@ -721,6 +721,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       renderer.setPixelRatio(pixelRatio);
       renderer.setClearColor(0x26262b, 1);
       renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;';
+      renderer.domElement.setAttribute('aria-hidden', 'true');
       target.appendChild(renderer.domElement);
       this.resize();
       observer = new ResizeObserver(() => this.resize());
