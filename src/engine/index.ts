@@ -6,6 +6,7 @@ import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
 import { generate as python, loadPythonData } from './shapes/python.ts';
 import { generate as flags, loadFlagsData } from './shapes/flags.ts';
 import { generate as dust } from './shapes/dust.ts';
+import { generate as contactDust } from './shapes/contactDust.ts';
 
 export type ShapeName = 'face' | 'india' | 'python' | 'lens' | 'flags' | 'f1' | 'dust';
 export interface FrameRect { x: number; y: number; w: number; h: number; }
@@ -27,6 +28,21 @@ export interface ParticleEngine {
 }
 
 const generators: Record<ShapeName, (count: number, seeds?: Float32Array) => Float32Array> = { face, india, python, lens, flags, f1, dust };
+
+// Particle visibility tuning. Alpha values multiply the shader's particle alpha.
+const PARTICLE_VISIBILITY = {
+  IDLE_ALPHA: 1,
+  IDLE_ALPHA_BY_SHAPE: { india: 1, python: 0.97, lens: 0.9, flags: 0.97, f1: 0.97, dust: 0.55 },
+  IDLE_ALPHA_BY_SHAPE_MOBILE: { india: 1, dust: 1 },
+  INDIA_IDLE_DIM: 1,
+  GLOW_BOOST: 1,
+  BASE_DIM: 0.45,
+  INDIA_EDGE_SHARE: 0.55,
+  CONTACT_DUST_KEEP: 0.75,
+  CONTACT_DUST_TIER_CUTOFFS: { faint: 0.85, medium: 0.97 },
+  CONTACT_DUST_ALPHA_TIERS: { faint: 1.1, medium: 1.5, star: 2.2 },
+  CONTACT_DUST_SIZE_TIERS: { faint: 0.55, medium: 0.9, star: 1.6 },
+} as const;
 
 interface ShapeBounds { minX: number; maxX: number; minY: number; maxY: number; maxAbsZ: number; }
 interface FrameTransform { rect: FrameRect; centerX: number; centerY: number; sourceX: number; sourceY: number; scale: number; scaleX: number; screenBounds: FrameRect; }
@@ -83,10 +99,13 @@ uniform float uGlowBoost;
 uniform float uGlowSizeEnabled;
 uniform vec3 uGlowTrail[4];
 uniform float uGlowActive;
+uniform vec3 uContactDustSizeTiers;
+uniform vec2 uContactDustTierCutoffs;
 varying float vSeed;
 varying float vFaceWeight;
 varying float vIndiaGlow;
 varying float vIndiaRing;
+varying float vIndiaWeight;
 varying float vDustWeight;
 varying float vGlow;
 varying float vShapeScale;
@@ -148,11 +167,15 @@ void main() {
   vFaceWeight = mix(uFaceFrom, uFaceTo, t);
   vIndiaGlow = smoothstep(0.035, 0.047, p.z) * mix(uIndiaFrom, uIndiaTo, t);
   vIndiaRing = smoothstep(0.064, 0.07, p.z) * (1.0 - smoothstep(0.075, 0.08, p.z)) * mix(uIndiaFrom, uIndiaTo, t);
+  vIndiaWeight = mix(uIndiaFrom, uIndiaTo, t);
   vDustWeight = dustWeight;
   vGlow = glow;
   float faceSize = mix(1.0, 1.9, fract(aSeed * 21739.319));
   float faceSizeCap = mix(3.0, mix(1.9, 2.85, glow * uGlowSizeEnabled), vFaceWeight) * uSizeScale;
-  gl_PointSize = clamp(mix(aSize, faceSize, vFaceWeight) * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * vShapeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap * vShapeScale);
+  float dustTier = fract(aSeed * 43758.5453);
+  float dustSize = dustTier < uContactDustTierCutoffs.x ? uContactDustSizeTiers.x : dustTier < uContactDustTierCutoffs.y ? uContactDustSizeTiers.y : uContactDustSizeTiers.z;
+  float contactSize = mix(1.0, dustSize, vDustWeight);
+  gl_PointSize = clamp(mix(aSize * contactSize, faceSize, vFaceWeight) * uPixelRatio * (4.5 / max(0.1, -mvPosition.z)) * uSizeScale * vShapeScale * (1.0 + 0.5 * glow * uGlowSizeEnabled), 1.0, faceSizeCap * vShapeScale);
 }`;
 
 const fragmentShader = `
@@ -160,10 +183,14 @@ uniform float uOpacity;
 uniform float uAlphaScale;
 uniform float uBaseDim;
 uniform float uTime;
+uniform float uIndiaIdleDim;
+uniform vec3 uContactDustAlphaTiers;
+uniform vec2 uContactDustTierCutoffs;
 varying float vSeed;
 varying float vFaceWeight;
 varying float vIndiaGlow;
 varying float vIndiaRing;
+varying float vIndiaWeight;
 varying float vDustWeight;
 varying float vGlow;
 varying float vShapeAlpha;
@@ -176,8 +203,14 @@ void main() {
   float ordinaryVariation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
   float faceVariation = mix(1.0, 1.5, fract(vSeed * 31817.171));
   float variation = mix(ordinaryVariation, faceVariation, vFaceWeight);
+  float dustTier = fract(vSeed * 43758.5453);
+  float dustAlpha = dustTier < uContactDustTierCutoffs.x ? uContactDustAlphaTiers.x : dustTier < uContactDustTierCutoffs.y ? uContactDustAlphaTiers.y : uContactDustAlphaTiers.z;
+  variation *= mix(1.0, dustAlpha, vDustWeight);
   float faceDim = mix(1.0, 0.9, vFaceWeight);
-  float baseAlpha = variation * uOpacity * uAlphaScale * vShapeAlpha * mix(1.0, 0.6, vDustWeight) * uBaseDim * faceDim;
+  float indiaAlphaScale = mix(uAlphaScale, 1.1, smoothstep(0.5, 1.0, vIndiaWeight));
+  float alphaScale = mix(uAlphaScale, indiaAlphaScale, smoothstep(0.5, 1.0, vIndiaWeight));
+  float idleDim = mix(uBaseDim, uIndiaIdleDim, vIndiaWeight);
+  float baseAlpha = variation * uOpacity * alphaScale * vShapeAlpha * mix(1.0, 0.6, vDustWeight) * idleDim * faceDim;
   float glowAlpha = baseAlpha * mix(1.0, 1.0 / max(0.05, uBaseDim), vGlow);
   float indiaPulse = 0.78 + 0.22 * sin(uTime * 1.4);
   float indiaRingAlpha = vIndiaRing * indiaPulse * 0.16;
@@ -206,9 +239,12 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   const shapePointScale: Record<ShapeName, number> = mobile
     ? { face: 1, india: 1, python: 1, lens: 1, flags: 1, f1: 1, dust: 1 }
     : { face: 1.23, india: 0.66, python: 0.97, lens: 0.82, flags: 0.97, f1: 0.97, dust: 0.72 };
-  const shapeAlphaScale: Record<ShapeName, number> = mobile
-    ? { face: 1, india: 1, python: 1, lens: 1, flags: 1, f1: 1, dust: 1 }
-    : { face: 1, india: 0.43, python: 0.97, lens: 0.9, flags: 0.97, f1: 0.97, dust: 0.55 };
+  const shapeAlphaScale: Record<ShapeName, number> = {
+    face: PARTICLE_VISIBILITY.IDLE_ALPHA, india: mobile ? PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE_MOBILE.india : PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.india,
+    python: PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.python, lens: PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.lens,
+    flags: PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.flags, f1: PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.f1,
+    dust: mobile ? PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE_MOBILE.dust : PARTICLE_VISIBILITY.IDLE_ALPHA_BY_SHAPE.dust,
+  };
   const slowSamples = new Uint8Array(120);
   let slowSamplesUsed = 0, slowSamplesCount = 0, slowSampleCursor = 0;
   const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -235,7 +271,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   let pointerX = 0, smoothX = 0;
   let cursorX = 0, cursorY = 0, smoothCursorX = 0, smoothCursorY = 0;
   let pointerActive = false, pointerType = 'mouse', touchFadeRemaining = 0, trailElapsed = 0, trailHead = 0;
-  let glowRadius = 140, glowDim = 0.45, glowBoost = 1;
+  let glowRadius = 140, glowDim: number = PARTICLE_VISIBILITY.BASE_DIM, glowBoost: number = PARTICLE_VISIBILITY.GLOW_BOOST;
   const debugPerf = new URLSearchParams(location.search).has('debugPerf') ? { updateMs: 0, renderMs: 0, renderAverageMs: 0, frameMs: 0, frameAverageMs: 0, particleCount: 0, quality: '', rendererInfo: { calls: 0, points: 0, geometries: 0, textures: 0 } } : null;
   if (debugPerf) (window as Window & { __particleEnginePerf?: NonNullable<typeof debugPerf> }).__particleEnginePerf = debugPerf;
   const trailX = new Float32Array(4), trailY = new Float32Array(4), trailAge = new Float32Array(4);
@@ -294,7 +330,12 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   if (new URLSearchParams(location.search).has('debugFrames')) (window as Window & { __particleFrameDebug?: Record<string, { rect: FrameRect; projected: FrameRect }> }).__particleFrameDebug = {};
   const getShape = (name: ShapeName) => {
     let value = shapeCache.get(name);
-    if (!value) { value = generators[name](count, seeds); shapeCache.set(name, value); }
+    if (!value) {
+      value = name === 'dust' ? contactDust(count, seeds, PARTICLE_VISIBILITY.CONTACT_DUST_KEEP)
+        : name === 'india' ? india(count, seeds, PARTICLE_VISIBILITY.INDIA_EDGE_SHARE)
+          : generators[name](count, seeds);
+      shapeCache.set(name, value);
+    }
     return value;
   };
   const getShapeBounds = (name: ShapeName): ShapeBounds => {
@@ -561,6 +602,10 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         blending: AdditiveBlending,
         uniforms: { uMorph: { value: 0 }, uMorphActive: { value: 0 }, uIntroActive: { value: 0 }, uIntroProgress: { value: 1 }, uIntroReady: { value: 1 }, uGlowActive: { value: 0 }, uPositionScaleA: { value: initialFace.scale }, uPositionScaleB: { value: initialFace.scale }, uPositionScaleScatter: { value: initialScatter.scale }, uShapeScaleFrom: { value: shapePointScale.face }, uShapeScaleTo: { value: shapePointScale.face }, uShapeAlphaFrom: { value: shapeAlphaScale.face }, uShapeAlphaTo: { value: shapeAlphaScale.face }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new Vector2() }, uFrameCenterTo: { value: new Vector2() }, uShapeCenterFrom: { value: new Vector2() }, uShapeCenterTo: { value: new Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uFrameScaleXFrom: { value: 1 }, uFrameScaleXTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, qualityTier === 'high' ? 1.5 : qualityTier === 'medium' ? 1.25 : 1) }, uSizeScale: { value: pointScaleForTier(qualityTier) }, uAlphaScale: { value: alphaScaleForTier(qualityTier) }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
       });
+      material.uniforms.uIndiaIdleDim = { value: PARTICLE_VISIBILITY.INDIA_IDLE_DIM };
+      material.uniforms.uContactDustAlphaTiers = { value: new Vector3(PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.medium, PARTICLE_VISIBILITY.CONTACT_DUST_ALPHA_TIERS.star) };
+      material.uniforms.uContactDustSizeTiers = { value: new Vector3(PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.medium, PARTICLE_VISIBILITY.CONTACT_DUST_SIZE_TIERS.star) };
+      material.uniforms.uContactDustTierCutoffs = { value: new Vector2(PARTICLE_VISIBILITY.CONTACT_DUST_TIER_CUTOFFS.faint, PARTICLE_VISIBILITY.CONTACT_DUST_TIER_CUTOFFS.medium) };
       points = new Points(geometry, material);
       points.frustumCulled = false;
       scene.add(points);

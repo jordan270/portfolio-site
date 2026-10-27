@@ -14,7 +14,7 @@ export function loadIndiaData(): Promise<void> {
 }
 
 /** Sample the supplied official outline, emphasizing its edge and Delhi NCR. */
-export function generate(count: number, seeds?: Float32Array): Float32Array {
+export function generate(count: number, seeds?: Float32Array, edgeShare = 0.38): Float32Array {
   if (!indiaMask?.length) return dust(count, seeds);
   const mask = indiaMask;
   const pathX = (77.2 - 68.1006) * 55.63;
@@ -34,7 +34,7 @@ export function generate(count: number, seeds?: Float32Array): Float32Array {
   const points = new Float32Array(Math.max(0, count) * 3);
   for (let i = 0; i < count; i++) {
     const seed = seeds?.[i] ?? (i + 0.5) / Math.max(1, count);
-    const edgeSample = seed < 0.38;
+    const edgeSample = seed < edgeShare;
     const list = edgeSample && edge.length ? edge : interior.length ? interior : edge;
     const pick = Math.floor((((seed * 0.618033989 + i * 0.754877666) % 1) * list.length));
     const source = list[Math.min(list.length - 1, pick)] ?? 0;
