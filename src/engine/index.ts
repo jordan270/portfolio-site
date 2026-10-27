@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { generate as face, loadFaceMaskData } from './shapes/face.ts';
+import { generate as face, getFaceFrameMetrics, loadFaceMaskData } from './shapes/face.ts';
 import { generate as india, loadIndiaData } from './shapes/india.ts';
 import { generate as lens } from './shapes/lens.ts';
 import { generate as f1, loadSource as loadF1Source } from './shapes/f1.ts';
@@ -214,7 +214,12 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     }
     if (name === 'face') {
       const bounds = getShapeBounds(name), spanY = Math.max(1e-4, bounds.maxY - bounds.minY);
-      const screenH = window.innerHeight * 1.05;
+      const metrics = getFaceFrameMetrics();
+      const narrow = window.innerWidth / Math.max(1, window.innerHeight) < 0.7;
+      const imageHeight = window.innerHeight * (narrow ? 1 : 1.12);
+      const imageTop = window.innerHeight * (narrow ? 0.08 : 0.06);
+      const screenH = imageHeight * metrics.alphaHeight;
+      const top = imageTop + imageHeight * metrics.alphaTop;
       let scale = screenH * unitsPerPixel / spanY;
       for (let i = 0; i < 4; i++) {
         const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
@@ -223,13 +228,13 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
       const projectedHeight = spanY * scale * perspective / unitsPerPixel;
       const projectedWidth = (bounds.maxX - bounds.minX) * scale * perspective / unitsPerPixel;
-      const scaleX = Math.min(1, window.innerWidth * 0.92 / Math.max(1, projectedWidth));
-      const top = window.innerHeight * 0.1;
+      const scaleX = 1;
+      const imageWidth = imageHeight * metrics.imageAspect;
       return {
-        rect: { x: 0, y: top, w: window.innerWidth, h: screenH },
+        rect: { x: window.innerWidth / 2 - imageWidth / 2, y: imageTop, w: imageWidth, h: imageHeight },
         centerX: 0,
         centerY: (window.innerHeight / 2 - top - projectedHeight / 2) * unitsPerPixel,
-        sourceX: 0,
+        sourceX: (bounds.minX + bounds.maxX) / 2,
         sourceY: (bounds.minY + bounds.maxY) / 2,
         scale,
         scaleX,
