@@ -40,10 +40,10 @@ const PARTICLE_VISIBILITY = {
   GLOW_BOOST: 1,
   BASE_DIM: 0.45,
   INDIA_EDGE_SHARE: 0.55,
-  CONTACT_DUST_KEEP: 0.75,
-  CONTACT_DUST_TIER_CUTOFFS: { faint: 0.85, medium: 0.97 },
-  CONTACT_DUST_ALPHA_TIERS: { faint: 1.1, medium: 1.5, star: 2.2 },
-  CONTACT_DUST_SIZE_TIERS: { faint: 0.55, medium: 0.9, star: 1.6 },
+  CONTACT_DUST_KEEP: 1,
+  CONTACT_DUST_TIER_CUTOFFS: { faint: 0.8, medium: 0.95 },
+  CONTACT_DUST_ALPHA_TIERS: { faint: 1.8, medium: 3, star: 4.6 },
+  CONTACT_DUST_SIZE_TIERS: { faint: 0.55, medium: 1.2, star: 2 },
 } as const;
 
 interface ShapeBounds { minX: number; maxX: number; minY: number; maxY: number; maxAbsZ: number; }
@@ -295,11 +295,15 @@ void main() {
   float indiaAlphaScale = mix(uAlphaScale, 1.1, smoothstep(0.5, 1.0, vIndiaWeight));
   float alphaScale = mix(uAlphaScale, indiaAlphaScale, smoothstep(0.5, 1.0, vIndiaWeight));
   float idleDim = mix(uBaseDim, uIndiaIdleDim, vIndiaWeight);
+  float starDust = step(uContactDustTierCutoffs.y, dustTier) * vDustWeight;
+  float twinkleMask = step(0.9, fract(vSeed * 913.7 + 0.37)) * starDust;
+  float twinkle = 1.0 + 0.25 * sin(uTime * (0.9 + fract(vSeed * 31.7) * 1.2) + vSeed * 39.0) * twinkleMask;
   float baseAlpha = variation * uOpacity * alphaScale * vShapeAlpha * mix(1.0, 0.6, vDustWeight) * idleDim * faceDim;
   float glowAlpha = baseAlpha * mix(1.0, 1.0 / max(0.05, uBaseDim), vGlow);
   float indiaPulse = 0.78 + 0.22 * sin(uTime * 1.4);
   float indiaRingAlpha = vIndiaRing * indiaPulse * 0.16;
-  float finalAlpha = falloff * (clamp(glowAlpha, 0.0, 1.0) * mix(1.0, 1.2, vIndiaGlow) + indiaRingAlpha);
+  float starHalo = exp(-r * r * 15.0) * 0.14 * starDust;
+  float finalAlpha = (falloff + starHalo) * (clamp(glowAlpha, 0.0, 1.0) * mix(1.0, 1.2, vIndiaGlow) * twinkle + indiaRingAlpha);
   gl_FragColor = vec4(vec3(1.0), min(1.0, finalAlpha * mix(1.0, vLoaderAlpha, uLoaderMode)));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
