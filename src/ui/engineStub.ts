@@ -5,6 +5,7 @@ type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   /** Create canvas inside container, start render loop */
   mount(container: HTMLElement): void;
+  setIntro(progress: number): void;
   /** Morph between two shapes. t is 0..1. Called every frame by scroll. */
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
   setFrame(rect: FrameRect, shape?: ShapeName): void;
@@ -220,6 +221,7 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
       console.log('[engineStub] Mounted in container');
     },
 
+    setIntro(_progress) {},
     setMorph(from, to, t) {
       currentFrom = normalizeShape(from);
       currentTo = normalizeShape(to);

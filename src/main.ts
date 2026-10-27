@@ -14,6 +14,7 @@ import { initReveal } from './ui/reveal';
 import { initInfinity } from './ui/infinity';
 import { initProjectCards } from './ui/projectCards';
 import { initParticleFrames } from './ui/frames';
+import { initIntro } from './ui/intro';
 
 function initApp(): void {
   const stage = document.getElementById('stage');
@@ -31,6 +32,9 @@ function initApp(): void {
 
   // 2. Adaptive quality
   engine.setQuality('auto');
+
+  // 2a. Begin from a viewport-wide WebGL scatter before assembling the hero.
+  initIntro(engine);
 
   // 3. Handle window resize
   window.addEventListener('resize', () => {

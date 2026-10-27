@@ -12,6 +12,7 @@ export interface FrameRect { x: number; y: number; w: number; h: number; }
 type LegacyShapeName = 'sphere' | 'map' | 'helix' | 'galaxy';
 export interface ParticleEngine {
   mount(container: HTMLElement): void;
+  setIntro(progress: number): void;
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
   setFrame(rect: FrameRect, shape?: ShapeName): void;
   setEnergy(value: number): void;
@@ -38,9 +39,12 @@ function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
 const vertexShader = `
 attribute vec3 positionA;
 attribute vec3 positionB;
+attribute vec3 positionScatter;
 attribute float aSeed;
 attribute float aSize;
 uniform float uMorph;
+uniform float uIntroActive;
+uniform float uIntroProgress;
 uniform float uTime;
 uniform float uEnergy;
 uniform float uBreath;
@@ -86,11 +90,21 @@ void main() {
   toPosition.y = (toPosition.y - uShapeCenterTo.y) * uFrameScaleTo + uFrameCenterTo.y;
   fromPosition.z *= uFrameScaleFrom;
   toPosition.z *= uFrameScaleTo;
-  vec3 p = mix(fromPosition, toPosition, t);
-  p.xy += vec2(sin(uTime * 0.12 + aSeed * 12.0), cos(uTime * 0.09 + aSeed * 17.0)) * (0.012 * dustWeight);
-  float transition = sin(t * 3.14159265);
-  float phase = uTime * 0.55 + aSeed * 31.0;
-  p += vec3(sin(p.y * 5.0 + phase), sin(p.z * 4.0 + phase * 1.13), cos(p.x * 4.5 + phase)) * (0.018 * transition);
+  vec3 p;
+  if (uIntroActive > 0.5) {
+    float introT = clamp((uIntroProgress - aSeed * 0.45) / 0.55, 0.0, 1.0);
+    introT = introT * introT * (3.0 - 2.0 * introT);
+    p = mix(positionScatter, toPosition, introT);
+    float introSwirl = sin(introT * 3.14159265);
+    float introPhase = uTime * 0.55 + aSeed * 31.0;
+    p += vec3(sin(p.y * 5.0 + introPhase), sin(p.z * 4.0 + introPhase * 1.13), cos(p.x * 4.5 + introPhase)) * (0.25 * introSwirl);
+  } else {
+    p = mix(fromPosition, toPosition, t);
+    p.xy += vec2(sin(uTime * 0.12 + aSeed * 12.0), cos(uTime * 0.09 + aSeed * 17.0)) * (0.012 * dustWeight);
+    float transition = sin(t * 3.14159265);
+    float phase = uTime * 0.55 + aSeed * 31.0;
+    p += vec3(sin(p.y * 5.0 + phase), sin(p.z * 4.0 + phase * 1.13), cos(p.x * 4.5 + phase)) * (0.018 * transition);
+  }
   p *= uBreath;
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
   vec4 clipPosition = projectionMatrix * mvPosition;
@@ -166,6 +180,8 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   let raf = 0;
   let disposed = false;
   let energy = 1;
+  let introActive = false;
+  let introProgress = 1;
   let targetMorph = 0;
   let fromName: ShapeName = 'face';
   let toName: ShapeName = 'face';
@@ -181,6 +197,28 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
   for (let i = 0; i < 8; i++) glowTrailUniforms.push(new THREE.Vector3());
   let seeds = new Float32Array(count);
   for (let i = 0; i < count; i++) seeds[i] = Math.random();
+  const makeScatterPositions = () => {
+    const scatter = new Float32Array(count * 3);
+    if (!camera) return scatter;
+    const aspect = Math.max(0.1, camera.aspect);
+    const columns = Math.ceil(Math.sqrt(count * aspect));
+    const rows = Math.ceil(count / columns);
+    for (let i = 0; i < count; i++) {
+      const seed = seeds[i] ?? Math.random();
+      const fract = (value: number) => value - Math.floor(value);
+      const jitterX = fract(Math.sin((i + 1) * 127.1 + seed * 311.7) * 43758.5453);
+      const jitterY = fract(Math.sin((i + 1) * 269.5 + seed * 183.3) * 24634.6345);
+      const depth = seed * 1.2 - 0.6;
+      const halfHeight = (camera.position.z - depth) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const halfWidth = halfHeight * aspect;
+      const x = ((i % columns + jitterX) / columns * 2 - 1) * halfWidth * 1.1;
+      const y = ((Math.floor(i / columns) + jitterY) / rows * 2 - 1) * halfHeight * 1.1;
+      scatter[i * 3] = x;
+      scatter[i * 3 + 1] = y;
+      scatter[i * 3 + 2] = depth;
+    }
+    return scatter;
+  };
   const clock = new THREE.Clock();
   const shapeCache = new Map<ShapeName, Float32Array>();
   const shapeBoundsCache = new Map<ShapeName, ShapeBounds>();
@@ -303,6 +341,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     }
     geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
     geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('positionScatter', new THREE.BufferAttribute(makeScatterPositions(), 3));
     installShapes(fromName, toName);
     updateFrameUniforms();
   };
@@ -326,6 +365,8 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     }
     const current = material.uniforms.uMorph.value as number;
     material.uniforms.uMorph.value = reducedMotion ? 0 : THREE.MathUtils.damp(current, targetMorph, 5, dt);
+    material.uniforms.uIntroActive.value = introActive ? 1 : 0;
+    material.uniforms.uIntroProgress.value = introProgress;
     const elapsed = clock.elapsedTime;
     material.uniforms.uTime.value = reducedMotion ? 0 : elapsed * Math.max(0, energy);
     material.uniforms.uEnergy.value = energy;
@@ -382,13 +423,14 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       const sizes = new Float32Array(count);
       for (let i = 0; i < count; i++) sizes[i] = Math.random() < 0.03 ? 3.0 + Math.random() * 0.6 : 1.2 + Math.random() * 1.25;
       geometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+      geometry.setAttribute('positionScatter', new THREE.BufferAttribute(makeScatterPositions(), 3));
       geometry.setAttribute('positionA', new THREE.BufferAttribute(getShape('face'), 3));
       geometry.setAttribute('positionB', new THREE.BufferAttribute(getShape('face'), 3));
       geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
       material = new THREE.ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthWrite: false,
         blending: THREE.AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new THREE.Vector2() }, uFrameCenterTo: { value: new THREE.Vector2() }, uShapeCenterFrom: { value: new THREE.Vector2() }, uShapeCenterTo: { value: new THREE.Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uFrameScaleXFrom: { value: 1 }, uFrameScaleXTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new THREE.Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
+        uniforms: { uMorph: { value: 0 }, uIntroActive: { value: 0 }, uIntroProgress: { value: 1 }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new THREE.Vector2() }, uFrameCenterTo: { value: new THREE.Vector2() }, uShapeCenterFrom: { value: new THREE.Vector2() }, uShapeCenterTo: { value: new THREE.Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uFrameScaleXFrom: { value: 1 }, uFrameScaleXTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new THREE.Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) }, uSizeScale: { value: 1 }, uAlphaScale: { value: 1 }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
       });
       points = new THREE.Points(geometry, material);
       scene.add(points);
@@ -423,7 +465,22 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       });
       raf = requestAnimationFrame(render);
     },
+    setIntro(progress) {
+      if (!Number.isFinite(progress)) return;
+      introProgress = THREE.MathUtils.clamp(progress, 0, 1);
+      introActive = introProgress < 1;
+      if (introActive && (fromName !== 'face' || toName !== 'face')) {
+        fromName = 'face'; toName = 'face'; targetMorph = 0;
+        installShapes(fromName, toName);
+        updateFrameUniforms();
+      }
+      if (material) {
+        material.uniforms.uIntroActive.value = introActive ? 1 : 0;
+        material.uniforms.uIntroProgress.value = introProgress;
+      }
+    },
     setMorph(from, to, t) {
+      if (introActive) return;
       from = normalizeShape(from); to = normalizeShape(to);
       if (from !== fromName || to !== toName) {
         fromName = from; toName = to; installShapes(from, to);
@@ -470,14 +527,18 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       if (!container || !renderer || !camera) return;
       const width = Math.max(1, container.clientWidth), height = Math.max(1, container.clientHeight);
       renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      if (geometry?.getAttribute('positionScatter')) {
+        (geometry.getAttribute('positionScatter') as THREE.BufferAttribute).copyArray(makeScatterPositions());
+        geometry.attributes.positionScatter.needsUpdate = true;
+      }
       if (material) {
         material.uniforms.uDustAspect.value = width / Math.max(1, height) / 1.6;
         const dpr = renderer.getPixelRatio();
         (material.uniforms.uGlowResolution.value as THREE.Vector2).set(width * dpr, height * dpr);
         material.uniforms.uGlowRadius.value = glowRadius * dpr;
       }
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
       shapeBoundsCache.clear();
       updateFrameUniforms();
     },
