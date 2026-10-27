@@ -6,6 +6,10 @@ export interface ParticleEngine {
   /** Create canvas inside container, start render loop */
   mount(container: HTMLElement): void;
   setIntro(progress: number): void;
+  setIntroReady(ready: boolean): void;
+  prepareIntro(onMilestone: (milestone: 'hero-data' | 'shader-warmup' | 'calibration') => void): Promise<void>;
+  getQualityTier(): 'high' | 'medium' | 'low';
+  setIntroReady(ready: boolean): void;
   /** Morph between two shapes. t is 0..1. Called every frame by scroll. */
   setMorph(from: ShapeName | LegacyShapeName, to: ShapeName | LegacyShapeName, t: number): void;
   setFrame(rect: FrameRect, shape?: ShapeName): void;
@@ -222,6 +226,9 @@ export function createEngineStub(opts?: { count?: number }): ParticleEngine {
     },
 
     setIntro(_progress) {},
+    setIntroReady(_ready) {},
+    async prepareIntro(onMilestone) { onMilestone('hero-data'); onMilestone('shader-warmup'); onMilestone('calibration'); },
+    getQualityTier() { return 'low'; },
     setMorph(from, to, t) {
       currentFrom = normalizeShape(from);
       currentTo = normalizeShape(to);

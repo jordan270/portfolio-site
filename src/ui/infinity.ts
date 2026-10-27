@@ -19,20 +19,15 @@ export function initInfinity(): void {
   svg.setAttribute('role', 'presentation');
   svg.setAttribute('aria-hidden', 'true');
   svg.innerHTML = `
-    <defs>
-      <filter id="infinity-glow" x="-10%" y="-20%" width="120%" height="140%" color-interpolation-filters="sRGB">
-        <feGaussianBlur stdDeviation="3" />
-      </filter>
-    </defs>
+    <path class="infinity-static-glow" d="${pathData}" />
     <path class="infinity-track" pathLength="1000" d="${pathData}" />
     <path class="infinity-trail" pathLength="1000" d="${pathData}" />
-    <path class="infinity-glow" pathLength="1000" d="${pathData}" />
     <path class="infinity-runner" pathLength="1000" d="${pathData}" />`;
   content.prepend(svg);
 
   const observer = new IntersectionObserver(([entry]) => {
     if (entry.isIntersecting) {
-      svg.classList.add('is-visible');
+  svg.classList.add('is-visible');
       observer.disconnect();
     }
   }, { threshold: 0.3 });

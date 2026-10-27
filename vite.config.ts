@@ -16,5 +16,15 @@ export default defineConfig({
         : []),
     ],
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/three/')) return 'vendor-three';
+          if (id.includes('/node_modules/gsap/')) return 'vendor-gsap';
+        },
+      },
+    },
+  },
 });
 

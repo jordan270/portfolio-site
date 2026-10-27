@@ -26,7 +26,7 @@ export function initProjectCards(): void {
   const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const videos: HTMLVideoElement[] = [];
 
-  for (const project of projects) {
+  for (const [projectIndex, project] of projects.entries()) {
     const section = document.getElementById(project.section);
     const content = section?.querySelector<HTMLElement>('.content-block');
     if (!section || !content) continue;
@@ -55,7 +55,9 @@ export function initProjectCards(): void {
       videos.push(video);
     } else if (asset) {
       const image = document.createElement('img');
-      image.src = asset; image.alt = ''; image.loading = 'lazy';
+      image.src = asset; image.alt = ''; image.width = 1280; image.height = 720;
+      image.decoding = 'async'; image.loading = projectIndex === 0 ? 'eager' : 'lazy';
+      void image.decode().catch(() => {}).then(() => image.classList.add('is-decoded'));
       media.append(image);
     } else {
       console.info(`[project-cards] no preview file for ${project.slug}; showing typographic fallback`);

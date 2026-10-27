@@ -41,12 +41,12 @@ export function initComet(canvasSelector: string = '#comet-canvas'): CometContro
 
   let width = window.innerWidth;
   let height = window.innerHeight;
-  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
   const resize = () => {
     width = window.innerWidth;
     height = window.innerHeight;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
@@ -73,17 +73,21 @@ export function initComet(canvasSelector: string = '#comet-canvas'): CometContro
   const damping = 0.72;
 
   // Trail buffer (~25 positions)
-  const MAX_TRAIL = 25;
+  const MAX_TRAIL = 16;
   const trail: TrailPoint[] = [];
+  let lastMoveAt = 0;
+  let lastFadeAt = 0;
 
   const onMouseMove = (e: MouseEvent) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
+    lastMoveAt = performance.now();
     if (!hasMoved) {
       headX = mouseX;
       headY = mouseY;
       hasMoved = true;
     }
+    if (rafId === null && isTabActive) rafId = requestAnimationFrame(animate);
   };
 
   window.addEventListener('mousemove', onMouseMove, { passive: true });
@@ -123,49 +127,26 @@ export function initComet(canvasSelector: string = '#comet-canvas'): CometContro
         trail.shift();
       }
 
-      // Draw naturally curved tapering trail
+      const now = performance.now();
+      if (now - lastMoveAt > 900 && now - lastFadeAt > 55) {
+        trail.shift();
+        lastFadeAt = now;
+      }
+
+      // Keep the comet in one gradient stroke rather than stroking every segment.
       const n = trail.length;
       if (n > 2) {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-
-        for (let i = 0; i < n - 1; i++) {
-          const p0 = trail[i];
-          const p1 = trail[i + 1];
-
-          // Compute midpoint between p0 and p1 for smooth Bezier curve
-          const midX = (p0.x + p1.x) / 2;
-          const midY = (p0.y + p1.y) / 2;
-
-          // Progress from tail (0) to head (1)
-          const t = (i + 1) / n;
-          const alpha = Math.pow(t, 1.8) * 0.75;
-          const lineWidth = 0.6 + t * 4.4;
-
-          ctx.beginPath();
-          ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
-          ctx.lineWidth = lineWidth;
-
-          if (i === 0) {
-            ctx.moveTo(p0.x, p0.y);
-            ctx.lineTo(midX, midY);
-          } else {
-            const prevMidX = (trail[i - 1].x + p0.x) / 2;
-            const prevMidY = (trail[i - 1].y + p0.y) / 2;
-            ctx.moveTo(prevMidX, prevMidY);
-            ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
-          }
-          ctx.stroke();
-        }
-
-        // Connect the last midpoint directly to the head
-        const lastMidX = (trail[n - 2].x + trail[n - 1].x) / 2;
-        const lastMidY = (trail[n - 2].y + trail[n - 1].y) / 2;
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(255, 255, 255, 0.85)`;
-        ctx.lineWidth = 5;
-        ctx.moveTo(lastMidX, lastMidY);
-        ctx.lineTo(headX, headY);
+        ctx.moveTo(trail[0].x, trail[0].y);
+        for (let i = 1; i < n; i++) ctx.lineTo(trail[i].x, trail[i].y);
+        const gradient = ctx.createLinearGradient(trail[0].x, trail[0].y, headX, headY);
+        gradient.addColorStop(0, 'rgba(255,255,255,0.03)');
+        gradient.addColorStop(0.55, 'rgba(255,255,255,0.28)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0.86)');
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 3.2;
         ctx.stroke();
       }
 
@@ -196,10 +177,9 @@ export function initComet(canvasSelector: string = '#comet-canvas'): CometContro
       ctx.fill();
     }
 
-    rafId = requestAnimationFrame(animate);
+    if (hasMoved && (performance.now() - lastMoveAt < 900 || trail.length > 0 || Math.hypot(velX, velY) > 0.12)) rafId = requestAnimationFrame(animate);
+    else rafId = null;
   };
-
-  rafId = requestAnimationFrame(animate);
 
   return {
     destroy() {

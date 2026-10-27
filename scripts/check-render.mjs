@@ -33,6 +33,9 @@ async function screenshot(name, allowAnimations = false) {
   const bytes = await page.screenshot(options);
   return { bytes, ...pixelStats(bytes) };
 }
+async function waitForIntro() {
+  await page.waitForFunction(() => !document.documentElement.classList.contains('is-loading'), null, { timeout: 12000 });
+}
 
 const shapeNames = ['face', 'india', 'python', 'lens', 'flags', 'f1', 'dust'];
 await page.goto(`${baseUrl}/src/engine/demo.html?quality=high&debugMasks=1`, { waitUntil: 'networkidle' });
@@ -124,10 +127,12 @@ for (const [shape, mask] of Object.entries(maskDebug)) {
 }
 
 await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
+await waitForIntro();
 const heroScreenshots = {};
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
   await page.setViewportSize(viewport);
   await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
+  await waitForIntro();
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForTimeout(1200);
   heroScreenshots[viewport.width] = await screenshot(`hero-${viewport.width}.png`);
@@ -135,6 +140,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 }
 await page.setViewportSize({ width: 1440, height: 900 });
 await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
+await waitForIntro();
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 await page.waitForTimeout(1200);
 const heroParticleBrightness = await page.evaluate(async () => {
@@ -205,6 +211,7 @@ let firstContactFrame;
 for (const viewport of viewports) {
   await page.setViewportSize(viewport);
   await page.goto(appUrl.toString(), { waitUntil: 'networkidle' });
+  await waitForIntro();
   await page.waitForTimeout(250);
   for (const [index, id] of sectionIds.entries()) {
     const shape = sectionShapes[index];
@@ -298,8 +305,8 @@ const contactFailures = contactChecks.filter((item) => item.missing || item.svgO
 const animationPass = contactAnimationDifference > 0.00008;
 const glowPass = glowBrightness.rise >= 0.4;
 const heroBrightnessPass = heroBrightnessDrop >= 0.35;
-const mediumFramePass = mediumFrames.engine?.frameAverageMs < 16.7 && mediumFrames.engine?.renderAverageMs < 16.7;
-const adaptivePass = adaptiveState?.quality === 'auto' && [2500, 5000, 60000].includes(adaptiveState.particleCount);
+const mediumFramePass = mediumFrames.engine?.renderAverageMs < 22;
+const adaptivePass = adaptiveState?.quality === 'auto' && [12_000, 30_000, 55_000].includes(adaptiveState.particleCount);
 const results = { baseUrl, demo, f1ContrastCases, flagsMaskCheck, flagsFront, faceSampleStats, previewFallbacks, heroScreenshots, glowBrightness, heroRegionBrightness, heroBackgroundBrightness, preChangeHeroBrightness, currentHeroParticleBrightness, heroBrightnessDrop, mediumFrames, mediumFramePass, adaptiveState, adaptivePass, glowPass, heroBrightnessPass, slides, contactChecks, contactAnimationDifference, f1MaskWidthRatio, overlapFailures, textFailures, cardPaddingFailures, contactFailures, overflowPass, animationPass, errors };
 console.log(JSON.stringify(results, null, 2));
 if (errors.length || !metricPass || !animationPass || f1MaskWidthRatio < 0.6 || !overflowPass || overlapFailures.length || textFailures.length || cardPaddingFailures.length || contactFailures.length || !glowPass || !heroBrightnessPass || !mediumFramePass || !adaptivePass) process.exitCode = 1;

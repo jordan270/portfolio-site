@@ -38,7 +38,13 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
     document.querySelectorAll<HTMLElement>('section[data-shape]')
   );
 
-  const triggers: ScrollTrigger[] = [];
+  let triggers: ScrollTrigger[] = [];
+  let midpoints: number[] = [];
+  let refreshQueued = false;
+
+  const measureMidpoints = () => {
+    midpoints = sectionElements.map((element) => element.offsetTop + element.offsetHeight / 2);
+  };
 
   const updateMidpointProgress = () => {
     if (sectionElements.length < 2) return;
@@ -47,11 +53,6 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
     const viewportCenter = scrollY + window.innerHeight / 2;
 
     // Calculate midpoints of all sections in page coordinates
-    const midpoints = sectionElements.map((el) => {
-      const rect = el.getBoundingClientRect();
-      return scrollY + rect.top + rect.height / 2;
-    });
-
     // Check where viewportCenter falls relative to adjacent midpoints
     if (viewportCenter <= midpoints[0]) {
       const from = (sectionElements[0].dataset.shape || 'face') as ShapeName;
@@ -82,37 +83,42 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
     }
   };
 
-  // Create ScrollTrigger instances for each adjacent section pair
-  for (let i = 0; i < sectionElements.length - 1; i++) {
-    const current = sectionElements[i];
-    const next = sectionElements[i + 1];
-    const fromShape = (current.dataset.shape || 'face') as ShapeName;
-    const toShape = (next.dataset.shape || 'india') as ShapeName;
-
-    const st = ScrollTrigger.create({
-      trigger: current,
-      start: 'center center',
-      endTrigger: next,
-      end: 'center center',
-      scrub: true,
-      onUpdate: (self) => {
-        if (self.isActive) {
-          onProgress(fromShape, toShape, self.progress);
-        }
-      },
-    });
-
-    triggers.push(st);
-  }
+  const rebuildTriggers = () => {
+    triggers.forEach((trigger) => trigger.kill());
+    triggers = [];
+    for (let i = 0; i < sectionElements.length - 1; i++) {
+      const current = sectionElements[i], next = sectionElements[i + 1];
+      const fromShape = (current.dataset.shape || 'face') as ShapeName;
+      const toShape = (next.dataset.shape || 'india') as ShapeName;
+      triggers.push(ScrollTrigger.create({
+        trigger: current, start: 'center center', endTrigger: next, end: 'center center', scrub: true,
+        onUpdate: (self) => { if (self.isActive) onProgress(fromShape, toShape, self.progress); },
+      }));
+    }
+  };
+  measureMidpoints();
+  rebuildTriggers();
 
   // Update on Lenis scroll and refresh
   lenis.on('scroll', updateMidpointProgress);
 
-  const handleResize = () => {
+  const refreshLayout = () => {
+    refreshQueued = false;
+    measureMidpoints();
+    rebuildTriggers();
     ScrollTrigger.refresh();
     updateMidpointProgress();
   };
+  const scheduleRefresh = () => {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    requestAnimationFrame(refreshLayout);
+  };
+  const resizeObserver = new ResizeObserver(scheduleRefresh);
+  sectionElements.forEach((section) => resizeObserver.observe(section));
+  const handleResize = () => scheduleRefresh();
   window.addEventListener('resize', handleResize);
+  void document.fonts?.ready.then(scheduleRefresh);
 
   // Initial calculation
   requestAnimationFrame(() => {
@@ -125,6 +131,7 @@ export function initScroll(onProgress: ScrollProgressCallback): ScrollController
     update: updateMidpointProgress,
     destroy() {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       lenis.destroy();
       gsap.ticker.remove(tickerCallback);
       triggers.forEach((st) => st.kill());

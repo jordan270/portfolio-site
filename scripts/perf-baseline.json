@@ -1,0 +1,32 @@
+[
+  {
+    "path": "normal",
+    "jsFrameMeanP95Ms": "not instrumented in initial baseline",
+    "engineUpdateSubmitMeanP95Ms": "1.13 / 3.00 ms (render submit only)",
+    "scrollFPS": "28.6",
+    "longTasks": "13 / 178 ms",
+    "drawCalls": 1,
+    "points": 2500,
+    "geometries": 1,
+    "textures": 4,
+    "heapGrowthPct": "-17.34",
+    "nodes": "401 → 233",
+    "listeners": "57 → 43",
+    "rafCallbacksPerFrame": "4.09"
+  },
+  {
+    "path": "slow",
+    "jsFrameMeanP95Ms": "not instrumented in initial baseline",
+    "engineUpdateSubmitMeanP95Ms": "1.36 / 4.20 ms (render submit only)",
+    "scrollFPS": "28.9",
+    "longTasks": "19 / 173 ms",
+    "drawCalls": 1,
+    "points": 2500,
+    "geometries": 1,
+    "textures": 4,
+    "heapGrowthPct": "0.15",
+    "nodes": "401 → 233",
+    "listeners": "57 → 43",
+    "rafCallbacksPerFrame": "4.08"
+  }
+]

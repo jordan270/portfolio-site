@@ -6,8 +6,7 @@ import './style.css';
 // ---------------------------------------------------------------------------
 export const USE_STUB = false;
 
-import { createEngine as createRealEngine } from './engine/index.ts';
-import { createEngineStub, type ParticleEngine } from './ui/engineStub';
+import type { ParticleEngine } from './ui/engineStub';
 import { initScroll } from './ui/scroll';
 import { initComet } from './ui/comet';
 import { initReveal } from './ui/reveal';
@@ -16,7 +15,7 @@ import { initProjectCards } from './ui/projectCards';
 import { initParticleFrames } from './ui/frames';
 import { initIntro } from './ui/intro';
 
-function initApp(): void {
+async function startApp(): Promise<void> {
   const stage = document.getElementById('stage');
   if (!stage) {
     console.error('[App] Stage element #stage not found');
@@ -25,8 +24,8 @@ function initApp(): void {
 
   // 1. Initialize Engine (stub or real). Both expose the same UI-facing API.
   const engine: ParticleEngine = USE_STUB
-    ? createEngineStub()
-    : (createRealEngine() as unknown as ParticleEngine);
+    ? (await import('./ui/engineStub')).createEngineStub()
+    : (await import('./engine/index.ts')).createEngine() as unknown as ParticleEngine;
 
   engine.mount(stage);
 
@@ -34,7 +33,7 @@ function initApp(): void {
   engine.setQuality('auto');
 
   // 2a. Begin from a viewport-wide WebGL scatter before assembling the hero.
-  initIntro(engine);
+  initIntro(engine, () => scroll.update());
 
   // 3. Handle window resize
   window.addEventListener('resize', () => {
@@ -61,7 +60,7 @@ function initApp(): void {
     engine.setEnergy(0);
   }
 
-  initScroll((from, to, t) => {
+  const scroll = initScroll((from, to, t) => {
     if (prefersReduced) {
       // Static shape per SPEC under reduced motion — snap, no interpolation
       engine.setMorph(from, to, t < 0.5 ? 0 : 1);
@@ -71,8 +70,6 @@ function initApp(): void {
   });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  initApp();
-}
+const boot = () => { requestAnimationFrame(() => { void startApp(); }); };
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
+else boot();
