@@ -187,7 +187,7 @@ function closeAndKeepLogo(input: Uint8Array, width: number, height: number): Uin
   return result;
 }
 
-export function sampleSvgMask(mask: Float32Array, count: number, seeds?: Float32Array, channel = 5): Float32Array {
+export function sampleSvgMask(mask: Float32Array, count: number, seeds?: Float32Array, channel = 5, flatPlane = false): Float32Array {
   const points = new Float32Array(Math.max(0, count) * 3);
   const pixels = mask.length / 2;
   for (let i = 0; i < count; i++) {
@@ -195,7 +195,7 @@ export function sampleSvgMask(mask: Float32Array, count: number, seeds?: Float32
     const index = Math.min(pixels - 1, Math.floor(((seed * 0.754877666 + channel * 0.569840296) % 1) * pixels));
     points[i * 3] = mask[index * 2];
     points[i * 3 + 1] = mask[index * 2 + 1];
-    points[i * 3 + 2] = ((seed * 17.13 + channel * 0.31) % 1 - 0.5) * 0.04;
+    points[i * 3 + 2] = flatPlane ? 0 : ((seed * 17.13 + channel * 0.31) % 1 - 0.5) * 0.04;
   }
   return points;
 }

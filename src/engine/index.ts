@@ -37,8 +37,8 @@ const PARTICLE_VISIBILITY = {
   IDLE_ALPHA_BY_SHAPE: { india: 1, python: 0.97, lens: 0.9, flags: 0.97, f1: 0.97, dust: 0.55 },
   IDLE_ALPHA_BY_SHAPE_MOBILE: { india: 1, dust: 1 },
   INDIA_IDLE_DIM: 1,
-  GLOW_BOOST: 1,
-  BASE_DIM: 0.45,
+  GLOW_BOOST: 0.8,
+  BASE_DIM: 0.55,
   INDIA_EDGE_SHARE: 0.55,
   CONTACT_DUST_KEEP: 1,
   CONTACT_DUST_TIER_CUTOFFS: { faint: 0.8, medium: 0.95 },
@@ -47,7 +47,7 @@ const PARTICLE_VISIBILITY = {
 } as const;
 
 interface ShapeBounds { minX: number; maxX: number; minY: number; maxY: number; maxAbsZ: number; }
-interface FrameTransform { rect: FrameRect; centerX: number; centerY: number; sourceX: number; sourceY: number; scale: number; scaleX: number; screenBounds: FrameRect; }
+interface FrameTransform { rect: FrameRect; centerX: number; centerY: number; sourceX: number; sourceY: number; scale: number; screenBounds: FrameRect; }
 
 function normalizeShape(name: ShapeName | LegacyShapeName): ShapeName {
   if (name === 'sphere') return 'face';
@@ -86,8 +86,6 @@ uniform vec2 uShapeCenterFrom;
 uniform vec2 uShapeCenterTo;
 uniform float uFrameScaleFrom;
 uniform float uFrameScaleTo;
-uniform float uFrameScaleXFrom;
-uniform float uFrameScaleXTo;
 uniform float uPixelRatio;
 uniform float uSizeScale;
 uniform float uShapeScaleFrom;
@@ -129,10 +127,8 @@ void main() {
   float dustWeight = mix(uDustFrom, uDustTo, t);
   fromPosition.x *= mix(1.0, uDustAspect, uDustFrom);
   toPosition.x *= mix(1.0, uDustAspect, uDustTo);
-  fromPosition.x = (fromPosition.x - uShapeCenterFrom.x) * uFrameScaleFrom * uFrameScaleXFrom + uFrameCenterFrom.x;
-  fromPosition.y = (fromPosition.y - uShapeCenterFrom.y) * uFrameScaleFrom + uFrameCenterFrom.y;
-  toPosition.x = (toPosition.x - uShapeCenterTo.x) * uFrameScaleTo * uFrameScaleXTo + uFrameCenterTo.x;
-  toPosition.y = (toPosition.y - uShapeCenterTo.y) * uFrameScaleTo + uFrameCenterTo.y;
+  fromPosition.xy = (fromPosition.xy - uShapeCenterFrom) * uFrameScaleFrom + uFrameCenterFrom;
+  toPosition.xy = (toPosition.xy - uShapeCenterTo) * uFrameScaleTo + uFrameCenterTo;
   fromPosition.z *= uFrameScaleFrom;
   toPosition.z *= uFrameScaleTo;
   vec3 p;
@@ -285,7 +281,7 @@ void main() {
   float r = length(q);
   if (r > 0.5) discard;
   float falloff = 1.0 - smoothstep(0.12, 0.5, r);
-  float ordinaryVariation = mix(0.18, 0.5, fract(vSeed * 43758.5453));
+  float ordinaryVariation = mix(0.22, 0.54, fract(vSeed * 43758.5453));
   float faceVariation = mix(1.0, 1.5, fract(vSeed * 31817.171));
   float variation = mix(ordinaryVariation, faceVariation, vFaceWeight);
   float dustTier = fract(vSeed * 43758.5453);
@@ -299,7 +295,7 @@ void main() {
   float twinkleMask = step(0.9, fract(vSeed * 913.7 + 0.37)) * starDust;
   float twinkle = 1.0 + 0.25 * sin(uTime * (0.9 + fract(vSeed * 31.7) * 1.2) + vSeed * 39.0) * twinkleMask;
   float baseAlpha = variation * uOpacity * alphaScale * vShapeAlpha * mix(1.0, 0.6, vDustWeight) * idleDim * faceDim;
-  float glowAlpha = baseAlpha * mix(1.0, 1.0 / max(0.05, uBaseDim), vGlow);
+  float glowAlpha = baseAlpha * mix(1.0, min(1.3, 1.0 / max(0.05, uBaseDim)), vGlow);
   float indiaPulse = 0.78 + 0.22 * sin(uTime * 1.4);
   float indiaRingAlpha = vIndiaRing * indiaPulse * 0.16;
   float starHalo = exp(-r * r * 15.0) * 0.14 * starDust;
@@ -447,7 +443,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     const height = Math.max(1, container?.clientHeight ?? window.innerHeight);
     const unitsPerPixel = 2 * cameraZ * Math.tan(MathUtils.degToRad(45 / 2)) / height;
     if (name === 'dust') {
-      return { rect, centerX: 0, centerY: 0, sourceX: 0, sourceY: 0, scale: 1, scaleX: 1, screenBounds: { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight } };
+      return { rect, centerX: 0, centerY: 0, sourceX: 0, sourceY: 0, scale: 1, screenBounds: { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight } };
     }
     if (name === 'face') {
       const bounds = getShapeBounds(name), spanY = Math.max(1e-4, bounds.maxY - bounds.minY);
@@ -465,7 +461,6 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
       const projectedHeight = spanY * scale * perspective / unitsPerPixel;
       const projectedWidth = (bounds.maxX - bounds.minX) * scale * perspective / unitsPerPixel;
-      const scaleX = 1;
       const imageWidth = imageHeight * metrics.imageAspect;
       return {
         rect: { x: window.innerWidth / 2 - imageWidth / 2, y: imageTop, w: imageWidth, h: imageHeight },
@@ -474,36 +469,31 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
         sourceX: (bounds.minX + bounds.maxX) / 2,
         sourceY: (bounds.minY + bounds.maxY) / 2,
         scale,
-        scaleX,
-        screenBounds: { x: window.innerWidth / 2 - projectedWidth * scaleX / 2, y: top, w: projectedWidth * scaleX, h: projectedHeight },
+        screenBounds: { x: window.innerWidth / 2 - projectedWidth / 2, y: top, w: projectedWidth, h: projectedHeight },
       };
     }
     if (name === 'india') {
-      return { rect, centerX: 0, centerY: 0, sourceX: 0, sourceY: 0, scale: 1, scaleX: 1, screenBounds: { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight } };
+      return { rect, centerX: 0, centerY: 0, sourceX: 0, sourceY: 0, scale: 1, screenBounds: { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight } };
     }
     const bounds = getShapeBounds(name);
     const spanX = Math.max(1e-4, bounds.maxX - bounds.minX), spanY = Math.max(1e-4, bounds.maxY - bounds.minY);
     const availableWidth = Math.max(1, rect.w) * unitsPerPixel, availableHeight = Math.max(1, rect.h) * unitsPerPixel;
-    let scale = Math.min(availableWidth / spanX, availableHeight / spanY);
-    for (let i = 0; i < 3; i++) {
-      const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
-      scale *= Math.min(1, availableWidth / (spanX * scale * perspective), availableHeight / (spanY * scale * perspective));
-    }
-    scale *= 0.92;
+    // One contain scale for both axes prevents card shapes from being stretched.
+    // Account for the nearest depth when fitting non-flat card shapes into the frame.
+    const scale = Math.min(availableWidth / spanX, availableHeight / spanY);
     const sourceX = (bounds.minX + bounds.maxX) / 2, sourceY = (bounds.minY + bounds.maxY) / 2;
     const centerX = (rect.x + rect.w / 2 - window.innerWidth / 2) * unitsPerPixel;
     const perspective = cameraZ / Math.max(0.5, cameraZ - bounds.maxAbsZ * scale);
     const screenW = spanX * scale * perspective / unitsPerPixel, screenH = spanY * scale * perspective / unitsPerPixel;
     const centerY = (window.innerHeight / 2 - (rect.y + rect.h / 2)) * unitsPerPixel;
     const screenBounds = { x: rect.x + rect.w / 2 - screenW / 2, y: rect.y + rect.h / 2 - screenH / 2, w: screenW, h: screenH };
-    return { rect, centerX, centerY, sourceX, sourceY, scale, scaleX: 1, screenBounds };
+    return { rect, centerX, centerY, sourceX, sourceY, scale, screenBounds };
   };
   const applyFrameUniform = (name: ShapeName, transform: FrameTransform, endpoint: 'From' | 'To') => {
     if (!material) return;
     (material.uniforms[`uFrameCenter${endpoint}`].value as Vector2).set(transform.centerX, transform.centerY);
     (material.uniforms[`uShapeCenter${endpoint}`].value as Vector2).set(transform.sourceX, transform.sourceY);
     material.uniforms[`uFrameScale${endpoint}`].value = transform.scale;
-    material.uniforms[`uFrameScaleX${endpoint}`].value = transform.scaleX;
     const debugFrames = (window as Window & { __particleFrameDebug?: Record<string, { rect: FrameRect; projected: FrameRect }> }).__particleFrameDebug;
     if (debugFrames) debugFrames[name] = { rect: transform.rect, projected: transform.screenBounds };
   };
@@ -694,7 +684,7 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
       material = new ShaderMaterial({
         vertexShader, fragmentShader, transparent: true, depthTest: false, depthWrite: false,
         blending: AdditiveBlending,
-        uniforms: { uMorph: { value: 0 }, uMorphActive: { value: 0 }, uIntroActive: { value: 0 }, uIntroProgress: { value: 1 }, uIntroReady: { value: 1 }, uGlowActive: { value: 0 }, uPositionScaleA: { value: initialFace.scale }, uPositionScaleB: { value: initialFace.scale }, uPositionScaleScatter: { value: initialScatter.scale }, uShapeScaleFrom: { value: shapePointScale.face }, uShapeScaleTo: { value: shapePointScale.face }, uShapeAlphaFrom: { value: shapeAlphaScale.face }, uShapeAlphaTo: { value: shapeAlphaScale.face }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new Vector2() }, uFrameCenterTo: { value: new Vector2() }, uShapeCenterFrom: { value: new Vector2() }, uShapeCenterTo: { value: new Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uFrameScaleXFrom: { value: 1 }, uFrameScaleXTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, qualityTier === 'high' ? 1.5 : qualityTier === 'medium' ? 1.25 : 1) }, uSizeScale: { value: pointScaleForTier(qualityTier) }, uAlphaScale: { value: alphaScaleForTier(qualityTier) }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
+        uniforms: { uMorph: { value: 0 }, uMorphActive: { value: 0 }, uIntroActive: { value: 0 }, uIntroProgress: { value: 1 }, uIntroReady: { value: 1 }, uGlowActive: { value: 0 }, uPositionScaleA: { value: initialFace.scale }, uPositionScaleB: { value: initialFace.scale }, uPositionScaleScatter: { value: initialScatter.scale }, uShapeScaleFrom: { value: shapePointScale.face }, uShapeScaleTo: { value: shapePointScale.face }, uShapeAlphaFrom: { value: shapeAlphaScale.face }, uShapeAlphaTo: { value: shapeAlphaScale.face }, uTime: { value: 0 }, uEnergy: { value: 1 }, uBreath: { value: 1 }, uFrameCenterFrom: { value: new Vector2() }, uFrameCenterTo: { value: new Vector2() }, uShapeCenterFrom: { value: new Vector2() }, uShapeCenterTo: { value: new Vector2() }, uFrameScaleFrom: { value: 1 }, uFrameScaleTo: { value: 1 }, uOpacity: { value: 1 }, uBaseDim: { value: glowDim }, uGlowResolution: { value: new Vector2(1, 1) }, uGlowRadius: { value: glowRadius }, uGlowBoost: { value: glowBoost }, uGlowSizeEnabled: { value: reducedMotion ? 0 : 1 }, uGlowTrail: { value: glowTrailUniforms }, uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, qualityTier === 'high' ? 1.5 : qualityTier === 'medium' ? 1.25 : 1) }, uSizeScale: { value: pointScaleForTier(qualityTier) }, uAlphaScale: { value: alphaScaleForTier(qualityTier) }, uFaceFrom: { value: 1 }, uFaceTo: { value: 1 }, uIndiaFrom: { value: 0 }, uIndiaTo: { value: 0 }, uDustFrom: { value: 0 }, uDustTo: { value: 0 }, uDustAspect: { value: window.innerWidth / Math.max(1, window.innerHeight) / 1.6 } },
       });
       material.uniforms.uIndiaIdleDim = { value: PARTICLE_VISIBILITY.INDIA_IDLE_DIM };
       material.uniforms.uIntroSwirlScale = { value: morphSwirlScale };

@@ -12,7 +12,7 @@ type ProjectCardData = {
   linkText?: string;
 };
 
-const RACE_ANALYZER_REPO_URL = 'https://github.com/jordan270';
+const RACE_ANALYZER_REPO_URL = 'https://github.com/code50/177883236/tree/main/project';
 
 const projects: ProjectCardData[] = [
   { section: 'autopilot', slug: 'autopilot', title: 'AutoPilot', year: '2026', label: 'NSUT Hackathon / Top 5 overall', description: 'A rule-based tower-defence agent in pure Python, scoring 357.78 across four public test cases.', tags: 'Python', concept: false, fact: 'Top 5 overall' },

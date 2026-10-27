@@ -1,4 +1,4 @@
-import { loadPngLogoMask, loadSvgMask, sampleSvgMask, type SampledMask } from './mask.ts';
+import { loadRasterMask, sampleSvgMask, type SampledMask } from './mask.ts';
 import { generate as dust } from './dust.ts';
 
 let sampledMask: SampledMask | null = null;
@@ -8,14 +8,10 @@ export function loadSource(): Promise<void> {
   if (!sourceRequest) {
     sourceRequest = (async () => {
       try {
-        sampledMask = await loadSvgMask('/assets/f1.svg', 'f1');
-      } catch (svgError) {
-        console.warn('[ParticleEngine] assets/f1.svg unavailable; sampling the supplied F1 PNG.', svgError);
-        try {
-          sampledMask = await loadPngLogoMask('/assets/f1.png', 'f1');
-        } catch (pngError) {
-          console.warn('[ParticleEngine] F1 image masks unavailable; using dust.', pngError);
-        }
+        // Keep the authored negative spaces intact; this mask is already clean and transparent.
+        sampledMask = await loadRasterMask('/assets/f1.png', 'f1', (rgba, offset) => rgba[offset + 3] > 128);
+      } catch (pngError) {
+        console.warn('[ParticleEngine] F1 image mask unavailable; using dust.', pngError);
       }
     })();
   }
@@ -24,7 +20,7 @@ export function loadSource(): Promise<void> {
 
 /** Sample the supplied F1 logo, or use dust until its mask loads. */
 export function generate(count: number, seeds?: Float32Array): Float32Array {
-  if (sampledMask) return sampleSvgMask(sampledMask, count, seeds, 13);
+  if (sampledMask) return sampleSvgMask(sampledMask, count, seeds, 13, true);
   return dust(count, seeds);
 }
 
