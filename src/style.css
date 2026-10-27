@@ -619,21 +619,28 @@ button:focus-visible,
     max-width: 100%;
   }
   .section--hero .hero-copy {
-    height: 100vh;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    justify-content: initial;
     gap: 1rem;
-    padding: 0 4.5vw;
+    box-sizing: border-box;
+    padding: clamp(3rem, 10vh, 5rem) max(6vw, 1.5rem) calc(8vh + 1.5rem);
+    background: linear-gradient(180deg, rgba(38, 38, 43, 0) 0%, #26262b 42%, #26262b 100%);
   }
   .section--hero .hero-name-group,
-  .section--hero .hero-role-group { width: 22vw; max-width: 22vw; min-width: 0; }
+  .section--hero .hero-role-group { width: auto; max-width: none; min-width: 0; }
   .section--hero .hero-role-group { margin-left: 0; text-align: right; }
   .section--hero .hero-role,
   .section--hero .hero-name { overflow-wrap: normal; text-wrap: pretty; }
   .section--hero .hero-name { white-space: nowrap; font-size: clamp(.875rem, 3.6vw, 1rem); }
   .section--hero .hero-name-group { position: static; }
-  .section--hero .hero-copy .status-indicator { position: absolute; left: 4.5vw; bottom: 6vh; margin: 0; }
+  .section--hero .hero-copy .status-indicator { position: static; margin: .4rem 0 0; white-space: nowrap; font-size: .85rem; }
 
   .section--location,
   .section--autopilot,
@@ -646,8 +653,8 @@ button:focus-visible,
 
   .section--contact {
     min-height: 100vh;
-    align-items: center;
-    padding: 4vh 6vw;
+    align-items: flex-end;
+    padding: 4vh 6vw calc(2vh + 1rem);
   }
 
   /* Reset right-alignment on mobile for natural reading flow */
