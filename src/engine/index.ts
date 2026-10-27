@@ -173,19 +173,27 @@ void main() {
     float clusterJitter = (fract(aSeed * 269.5) - 0.5) * 0.004;
     ringNdc += vec2(cos(aSeed * 719.0), sin(aSeed * 719.0)) * clusterJitter;
     float headDistance = mod(ringSlot - uLoaderTime * 12.0 / 1.1 + 12.0, 12.0);
-    float headAlpha = 1.0 - 0.9 * headDistance / 12.0;
+    float tailRank = 1.0 - 0.85 * min(headDistance / 8.0, 1.0);
+    float headAlpha = tailRank;
+    float particleRandom = fract(sin(aSeed * 127.1 + 311.7) * 43758.5453);
+    float particleRandom2 = fract(sin(aSeed * 269.5 + 183.3) * 24634.6345);
     vec4 scatterClip = projectionMatrix * modelViewMatrix * vec4(positionScatter * uPositionScaleScatter, 1.0);
     vec2 scatterNdc = scatterClip.xy / max(0.0001, scatterClip.w);
     vec4 faceClip = projectionMatrix * modelViewMatrix * vec4(toPosition, 1.0);
     vec2 faceNdc = faceClip.xy / max(0.0001, faceClip.w);
-    vec2 columnNdc = vec2((fract(aSeed * 721.3) - 0.5) * 0.12,
-                          scatterNdc.y * 0.78);
     vec2 loaderNdc = scatterNdc;
     float alpha = 0.0;
     float easeP = uLoaderProgress * uLoaderProgress * (3.0 - 2.0 * uLoaderProgress);
     if (uLoaderPhase < 0.5) {
       float settle = smoothstep(0.455, 1.0, uLoaderProgress);
-      vec2 tighteningScatter = scatterNdc * (1.0 - 0.62 * settle);
+      float particleProgress = clamp((uLoaderProgress - particleRandom * 0.20) / 0.80, 0.0, 1.0);
+      particleProgress = particleProgress * particleProgress * (3.0 - 2.0 * particleProgress);
+      float radialDistance = length(scatterNdc);
+      float distanceJitter = clamp(radialDistance / 2.8, 0.0, 1.0) * 0.12;
+      float converge = clamp(particleProgress * (0.76 + particleRandom2 * 0.48 + distanceJitter), 0.0, 1.0);
+      float swirlAngle = converge * (0.25 + particleRandom * 0.55) * (1.0 - ringParticle);
+      mat2 swirlRotation = mat2(cos(swirlAngle), -sin(swirlAngle), sin(swirlAngle), cos(swirlAngle));
+      vec2 tighteningScatter = swirlRotation * scatterNdc * (1.0 - 0.90 * converge);
       loaderNdc = mix(tighteningScatter, ringNdc, ringParticle * easeP);
       float fadeIn = smoothstep(0.0, 0.46, uLoaderProgress);
       alpha = mix(0.025 * fadeIn * (1.0 - settle), 2.8 * headAlpha * fadeIn, ringParticle);
@@ -194,16 +202,22 @@ void main() {
       loaderNdc = mix(ringNdc, vec2(0.0), ringParticle * easeP);
       alpha = ringParticle * (2.8 * headAlpha) + ambient * 0.11;
     } else if (uLoaderPhase < 2.5) {
-      loaderNdc = scatterNdc * easeP;
+      float burstProgress = clamp((uLoaderProgress - particleRandom * 0.16) / 0.84, 0.0, 1.0);
+      burstProgress = burstProgress * burstProgress * (3.0 - 2.0 * burstProgress);
+      float burstDistance = 0.72 + particleRandom2 * 0.78;
+      loaderNdc = scatterNdc * burstDistance * burstProgress;
       alpha = (1.0 - ambient) * 0.16 + ambient * 0.11;
     } else if (uLoaderPhase < 3.5) {
-      loaderNdc = mix(scatterNdc, columnNdc, easeP);
+      float faceRadius = length(faceNdc);
+      float radialStagger = clamp((uLoaderProgress - min(0.34, faceRadius * 0.18) - particleRandom * 0.12) / 0.88, 0.0, 1.0);
+      radialStagger = radialStagger * radialStagger * (3.0 - 2.0 * radialStagger);
+      loaderNdc = mix(scatterNdc, faceNdc, radialStagger);
       alpha = (1.0 - ambient) * 0.28 + ambient * 0.11;
     } else if (uLoaderPhase < 4.5) {
-      float stagger = clamp((uLoaderProgress - aSeed * 0.16) / 0.84, 0.0, 1.0);
+      float stagger = clamp((uLoaderProgress - particleRandom * 0.16) / 0.84, 0.0, 1.0);
       stagger = stagger * stagger * (3.0 - 2.0 * stagger);
       vec2 swirl = vec2(sin(aSeed * 97.0 + uLoaderTime * 0.8), cos(aSeed * 73.0 + uLoaderTime * 0.7)) * (uIntroSwirlScale * 0.2 * sin(stagger * 3.14159265));
-      loaderNdc = mix(columnNdc, faceNdc, stagger) + swirl;
+      loaderNdc = mix(scatterNdc, faceNdc, stagger) + swirl;
       alpha = (1.0 - ambient) * stagger + ambient * 0.09;
     } else {
       loaderNdc = mix(ringNdc, faceNdc, easeP);
@@ -217,7 +231,7 @@ void main() {
     }
     clipPosition = vec4(loaderNdc, 0.0, 1.0);
     vLoaderAlpha = max(0.0, alpha);
-    float ringSize = ringParticle > 0.5 ? (0.8 + 1.6 * headAlpha) : 0.55;
+    float ringSize = ringParticle > 0.5 ? (0.45 + 1.95 * headAlpha) : 0.55;
     gl_PointSize = clamp(aSize * ringSize * uPixelRatio, 1.0, 4.0 * uPixelRatio);
   }
   gl_Position = clipPosition;
@@ -360,20 +374,16 @@ export function createEngine(opts: { count?: number } = {}): ParticleEngine {
     const scatter = new Float32Array(count * 3);
     if (!camera) return scatter;
     const aspect = Math.max(0.1, camera.aspect);
-    const columns = Math.ceil(Math.sqrt(count * aspect));
-    const rows = Math.ceil(count / columns);
     for (let i = 0; i < count; i++) {
       const seed = seeds[i] ?? Math.random();
       const fract = (value: number) => value - Math.floor(value);
-      const jitterX = fract(Math.sin((i + 1) * 127.1 + seed * 311.7) * 43758.5453);
-      const jitterY = fract(Math.sin((i + 1) * 269.5 + seed * 183.3) * 24634.6345);
+      const radial = Math.sqrt(fract(Math.sin((i + 1) * 127.1 + seed * 311.7) * 43758.5453)) * 2.2;
+      const angle = fract(Math.sin((i + 1) * 269.5 + seed * 183.3) * 24634.6345) * Math.PI * 2;
       const depth = seed * 1.2 - 0.6;
       const halfHeight = (camera.position.z - depth) * Math.tan(MathUtils.degToRad(camera.fov / 2));
       const halfWidth = halfHeight * aspect;
-      const x = ((i % columns + jitterX) / columns * 2 - 1) * halfWidth * 1.1;
-      const y = ((Math.floor(i / columns) + jitterY) / rows * 2 - 1) * halfHeight * 1.1;
-      scatter[i * 3] = x;
-      scatter[i * 3 + 1] = y;
+      scatter[i * 3] = Math.cos(angle) * halfWidth * radial;
+      scatter[i * 3 + 1] = Math.sin(angle) * halfHeight * radial;
       scatter[i * 3 + 2] = depth;
     }
     return scatter;
